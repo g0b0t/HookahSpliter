@@ -1,0 +1,128 @@
+:root {
+  --surface: rgba(255, 255, 255, 0.82);
+  --surface-muted: rgba(255, 255, 255, 0.65);
+  --border-soft: rgba(120, 120, 128, 0.16);
+  --accent: #0a84ff;
+  --text-main: #1c1c1e;
+  --text-muted: #6c6c70;
+  --radius: 18px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: linear-gradient(180deg, #f5f5f7 0%, #e5e5ea 100%);
+  color: var(--text-main);
+  min-height: 100vh;
+}
+
+header h1 {
+  letter-spacing: -0.02em;
+}
+
+.nav-pills .nav-link {
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.nav-pills .nav-link.active {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 10px 20px rgba(10, 132, 255, 0.18);
+}
+
+.nav-pills .nav-link:not(.active):hover {
+  background: var(--surface-muted);
+  color: var(--text-main);
+}
+
+.card-glass {
+  background: var(--surface);
+  border-radius: var(--radius);
+  border: 1px solid var(--border-soft);
+  box-shadow: 0 12px 30px rgba(28, 28, 30, 0.08);
+  backdrop-filter: blur(24px);
+}
+
+.section-title {
+  font-weight: 700;
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.list-group-item {
+  border-radius: var(--radius);
+  border: 1px solid var(--border-soft);
+  margin-bottom: 0.5rem;
+}
+
+.list-group-item.active {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.btn-primary {
+  background-color: var(--accent);
+  border-color: var(--accent);
+  border-radius: 14px;
+  font-weight: 600;
+}
+
+.btn-outline-secondary,
+.btn-outline-danger,
+.btn-outline-primary {
+  border-radius: 14px;
+}
+
+input.form-control,
+textarea.form-control {
+  border-radius: 14px;
+  border: 1px solid var(--border-soft);
+  background-color: rgba(255, 255, 255, 0.9);
+}
+
+input.form-control:focus,
+textarea.form-control:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 0.2rem rgba(10, 132, 255, 0.15);
+}
+
+.tag-button {
+  border: none;
+  border-radius: 999px;
+  background: rgba(10, 132, 255, 0.1);
+  color: var(--accent);
+  padding: 0.25rem 0.75rem;
+  font-weight: 600;
+}
+
+.tag-button:hover {
+  background: rgba(10, 132, 255, 0.18);
+}
+
+@media (max-width: 576px) {
+  header h1 {
+    font-size: 1.25rem;
+  }
+
+  .nav-pills {
+    gap: 0.5rem;
+    padding: 0.35rem;
+  }
+
+  .nav-pills .nav-link {
+    font-size: 0.85rem;
+    padding: 0.55rem 0.35rem;
+  }
+
+  .card-glass {
+    padding: 1rem !important;
+  }
+}
