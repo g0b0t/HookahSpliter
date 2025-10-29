@@ -2,24 +2,100 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Hookah Spliter</title>
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+    rel="stylesheet"
+    integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH"
+    crossorigin="anonymous"
+  />
   <link rel="stylesheet" href="styles.css" />
 </head>
-<body>
-  <div id="app"></div>
-  <template id="modal-template">
-    <div class="modal-overlay" data-modal-overlay>
-      <div class="modal" role="dialog" aria-modal="true">
-        <div class="modal__header">
-          <h2 class="modal__title"></h2>
-          <button class="modal__close" data-close-modal>&times;</button>
-        </div>
-        <div class="modal__content"></div>
-        <div class="modal__actions"></div>
-      </div>
+<body class="bg-light">
+  <div class="container py-3" id="app">
+    <header class="text-center mb-3">
+      <h1 class="h4 fw-semibold mb-1">Hookah Spliter</h1>
+      <p class="text-muted small mb-0">Лёгкий способ честно разделить вечер</p>
+    </header>
+
+    <ul class="nav nav-pills nav-justified shadow-sm rounded-pill mb-3" id="mainTab" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button
+          class="nav-link active"
+          id="session-tab"
+          data-bs-toggle="tab"
+          data-bs-target="#sessionPane"
+          type="button"
+          role="tab"
+          aria-controls="sessionPane"
+          aria-selected="true"
+        >Сессия</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button
+          class="nav-link"
+          id="summary-tab"
+          data-bs-toggle="tab"
+          data-bs-target="#summaryPane"
+          type="button"
+          role="tab"
+          aria-controls="summaryPane"
+          aria-selected="false"
+        >Итоги</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button
+          class="nav-link"
+          id="people-tab"
+          data-bs-toggle="tab"
+          data-bs-target="#peoplePane"
+          type="button"
+          role="tab"
+          aria-controls="peoplePane"
+          aria-selected="false"
+        >Участники</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button
+          class="nav-link"
+          id="settings-tab"
+          data-bs-toggle="tab"
+          data-bs-target="#settingsPane"
+          type="button"
+          role="tab"
+          aria-controls="settingsPane"
+          aria-selected="false"
+        >Настройки</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button
+          class="nav-link"
+          id="history-tab"
+          data-bs-toggle="tab"
+          data-bs-target="#historyPane"
+          type="button"
+          role="tab"
+          aria-controls="historyPane"
+          aria-selected="false"
+        >Сессии</button>
+      </li>
+    </ul>
+
+    <div class="tab-content" id="mainTabContent">
+      <div class="tab-pane fade show active" id="sessionPane" role="tabpanel" aria-labelledby="session-tab"></div>
+      <div class="tab-pane fade" id="summaryPane" role="tabpanel" aria-labelledby="summary-tab"></div>
+      <div class="tab-pane fade" id="peoplePane" role="tabpanel" aria-labelledby="people-tab"></div>
+      <div class="tab-pane fade" id="settingsPane" role="tabpanel" aria-labelledby="settings-tab"></div>
+      <div class="tab-pane fade" id="historyPane" role="tabpanel" aria-labelledby="history-tab"></div>
     </div>
-  </template>
+  </div>
+
+  <script
+    src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+    integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
+    crossorigin="anonymous"
+  ></script>
   <script type="module" src="main.js"></script>
 </body>
 </html>
