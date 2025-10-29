@@ -48,6 +48,14 @@ const getDefaultSessionName = () => {
 
 const formatCurrency = (value) => `${Math.round(value || 0).toLocaleString("ru-RU")} ₽`;
 
+const escapeHtml = (value) =>
+  String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
 const formatDateTime = (isoString) => {
   if (!isoString) return "";
   const date = new Date(isoString);
@@ -73,7 +81,6 @@ class HookahSpliterApp {
     this.state = loadState();
     this.elements = {
       sessionPane: document.getElementById("sessionPane"),
-      summaryPane: document.getElementById("summaryPane"),
       peoplePane: document.getElementById("peoplePane"),
       settingsPane: document.getElementById("settingsPane"),
       historyPane: document.getElementById("historyPane"),
@@ -88,7 +95,6 @@ class HookahSpliterApp {
 
   renderAll() {
     this.renderSessionPane();
-    this.renderSummaryPane();
     this.renderPeoplePane();
     this.renderSettingsPane();
     this.renderHistoryPane();
@@ -160,16 +166,6 @@ class HookahSpliterApp {
     session.endedAt = endedAt;
 
     this.persistAndRender();
-
-    const summaryTabTrigger = document.querySelector('#summary-tab');
-    if (summaryTabTrigger) {
-      if (window.bootstrap?.Tab) {
-        const tab = new window.bootstrap.Tab(summaryTabTrigger);
-        tab.show();
-      } else {
-        summaryTabTrigger.click();
-      }
-    }
   }
 
   addBowl() {
@@ -199,7 +195,8 @@ class HookahSpliterApp {
   updateSessionName(name) {
     const session = this.state.currentSession;
     if (!session || !session.isActive) return;
-    session.name = name;
+    const trimmed = (name || "").trim();
+    session.name = trimmed || session.name || getDefaultSessionName();
     this.persistAndRender();
   }
 
@@ -208,7 +205,8 @@ class HookahSpliterApp {
     if (!session || !session.isActive) return;
     const bowl = session.bowls.find((b) => b.id === bowlId);
     if (!bowl) return;
-    bowl.name = name;
+    const trimmed = (name || "").trim();
+    bowl.name = trimmed || bowl.name || "Чаша";
     this.persistAndRender();
   }
 
@@ -318,9 +316,15 @@ class HookahSpliterApp {
 
     session.bowls.forEach((bowl) => {
       const participants = bowl.participantIds.map((id) => personMap.get(id)).filter(Boolean);
-      if (!participants.length) return;
-      const share = Math.round((Number(bowl.cost) || 0) / participants.length);
-      totalCost += Number(bowl.cost) || 0;
+      const cost = Math.max(0, Math.round(Number(bowl.cost) || 0));
+      totalCost += cost;
+      if (!participants.length || cost === 0) {
+        return;
+      }
+
+      const baseShare = Math.floor(cost / participants.length);
+      let remainder = cost - baseShare * participants.length;
+
       participants.forEach((person) => {
         if (!summaryMap.has(person.id)) {
           summaryMap.set(person.id, {
@@ -332,6 +336,10 @@ class HookahSpliterApp {
         }
         const entry = summaryMap.get(person.id);
         entry.bowlsCount += 1;
+        const share = baseShare + (remainder > 0 ? 1 : 0);
+        if (remainder > 0) {
+          remainder -= 1;
+        }
         entry.total += share;
       });
     });
@@ -352,7 +360,7 @@ class HookahSpliterApp {
           <h2 class="h5 fw-semibold mb-3">Начать новый вечер</h2>
           <div class="mb-3">
             <label for="newSessionName" class="form-label">Название сессии</label>
-            <input type="text" id="newSessionName" class="form-control" value="${suggestedName}" placeholder="Например, Пятница с друзьями" />
+            <input type="text" id="newSessionName" class="form-control" value="${escapeHtml(suggestedName)}" placeholder="Например, Пятница с друзьями" />
           </div>
           <button class="btn btn-primary w-100" data-action="start-session">Начать сессию</button>
         </div>
@@ -375,6 +383,7 @@ class HookahSpliterApp {
     const personMap = this.getPersonMap();
     const participants = activeBowl ? activeBowl.participantIds.map((id) => personMap.get(id)).filter(Boolean) : [];
     const availablePeople = this.state.people.filter((person) => !activeBowl?.participantIds.includes(person.id));
+    const summary = this.computeSummary(session);
 
     container.innerHTML = `
       <div class="d-grid gap-3">
@@ -382,10 +391,10 @@ class HookahSpliterApp {
           <div class="d-flex flex-column gap-3">
             <div>
               <label class="form-label text-uppercase small text-muted mb-1">Название сессии</label>
-              <input type="text" class="form-control" value="${session.name}" data-role="session-name" />
+              <input type="text" class="form-control" value="${escapeHtml(session.name)}" data-role="session-name" />
             </div>
             <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between">
-              <div class="text-muted small">Старт: ${formatDateTime(session.startedAt)}</div>
+              <div class="text-muted small">Старт: ${escapeHtml(formatDateTime(session.startedAt))}</div>
               <button class="btn btn-outline-danger" data-action="end-session">Завершить сессию</button>
             </div>
           </div>
@@ -407,7 +416,7 @@ class HookahSpliterApp {
                     data-bowl-id="${bowl.id}"
                   >
                     <div class="d-flex justify-content-between align-items-center">
-                      <span>${bowl.name}</span>
+                      <span>${escapeHtml(bowl.name)}</span>
                       <span class="badge ${bowl.id === activeBowl.id ? "bg-light text-dark" : "text-bg-light"}">${bowl.participantIds.length}</span>
                     </div>
                   </button>
@@ -422,7 +431,7 @@ class HookahSpliterApp {
           <div class="card-glass p-4 d-grid gap-3">
             <div>
               <label class="form-label text-uppercase small text-muted mb-1">Название чаши</label>
-              <input type="text" class="form-control" value="${activeBowl.name}" data-role="bowl-name" />
+              <input type="text" class="form-control" value="${escapeHtml(activeBowl.name)}" data-role="bowl-name" />
             </div>
             <div>
               <label class="form-label text-uppercase small text-muted mb-1">Стоимость (₽)</label>
@@ -439,7 +448,7 @@ class HookahSpliterApp {
                       .map(
                         (person) => `
                           <li class="list-group-item d-flex justify-content-between align-items-center">
-                            <span>${person.name}</span>
+                            <span>${escapeHtml(person.name)}</span>
                             <button class="btn btn-sm btn-outline-danger" data-action="remove-participant" data-person-id="${person.id}">Убрать</button>
                           </li>
                         `,
@@ -457,7 +466,7 @@ class HookahSpliterApp {
                     ${availablePeople
                       .map(
                         (person) => `
-                          <button class="tag-button" data-action="quick-add" data-person-id="${person.id}">${person.name}</button>
+                          <button class="tag-button" data-action="quick-add" data-person-id="${person.id}">${escapeHtml(person.name)}</button>
                         `,
                       )
                       .join("")}
@@ -468,6 +477,32 @@ class HookahSpliterApp {
           </div>
         `
           : ''}
+
+        <div class="card-glass p-4">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h3 class="h6 mb-0">Текущие итоги</h3>
+            <span class="badge text-bg-light">${formatCurrency(summary.total)}</span>
+          </div>
+          ${summary.rows.length
+            ? `
+              <div class="list-group list-group-flush">
+                ${summary.rows
+                  .map(
+                    (row) => `
+                      <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                          <div class="fw-semibold">${escapeHtml(row.name)}</div>
+                          <div class="text-muted small">Чаш: ${row.bowlsCount}</div>
+                        </div>
+                        <span class="badge text-bg-primary">${formatCurrency(row.total)}</span>
+                      </div>
+                    `,
+                  )
+                  .join("")}
+              </div>
+            `
+            : '<p class="text-muted small mb-0">Добавьте участников в чаши, чтобы увидеть расчёт.</p>'}
+        </div>
       </div>
     `;
 
@@ -514,84 +549,6 @@ class HookahSpliterApp {
     }
   }
 
-  renderSummaryPane() {
-    const container = this.elements.summaryPane;
-    const session = this.state.currentSession;
-
-    if (!session) {
-      container.innerHTML = `
-        <div class="card-glass p-4 text-center text-muted">
-          Начните сессию, чтобы увидеть итоги.
-        </div>
-      `;
-      return;
-    }
-
-    const summary = this.computeSummary(session);
-    const sessionStatus = session.isActive ? 'В процессе' : 'Завершена';
-
-    container.innerHTML = `
-      <div class="d-grid gap-3">
-        <div class="card-glass p-4">
-          <div class="d-flex flex-wrap justify-content-between gap-2 align-items-center">
-            <div>
-              <h2 class="h5 fw-semibold mb-1">${session.name}</h2>
-              <p class="text-muted small mb-0">${formatDateRange(session.startedAt, session.endedAt)}</p>
-            </div>
-            <span class="badge ${session.isActive ? 'text-bg-primary' : 'text-bg-success'}">${sessionStatus}</span>
-          </div>
-        </div>
-
-        <div class="card-glass p-4">
-          <div class="d-flex justify-content-between align-items-center mb-3">
-            <h3 class="h6 mb-0">Итого</h3>
-            <span class="badge text-bg-light">${formatCurrency(summary.total)}</span>
-          </div>
-          ${summary.rows.length
-            ? `
-              <div class="list-group list-group-flush">
-                ${summary.rows
-                  .map(
-                    (row) => `
-                      <div class="list-group-item d-flex justify-content-between align-items-center">
-                        <div>
-                          <div class="fw-semibold">${row.name}</div>
-                          <div class="text-muted small">Чаш: ${row.bowlsCount}</div>
-                        </div>
-                        <span class="badge text-bg-primary">${formatCurrency(row.total)}</span>
-                      </div>
-                    `,
-                  )
-                  .join("")}
-              </div>
-            `
-            : '<p class="text-muted small mb-0">Добавьте участников, чтобы увидеть расчёт.</p>'}
-        </div>
-
-        <div class="card-glass p-4">
-          <h3 class="h6 mb-3">Детали по чашам</h3>
-          ${session.bowls.length
-            ? session.bowls
-                .map((bowl) => {
-                  const personMap = this.getPersonMap();
-                  const names = bowl.participantIds.map((id) => personMap.get(id)?.name).filter(Boolean);
-                  return `
-                    <div class="mb-3">
-                      <div class="d-flex justify-content-between align-items-center mb-1">
-                        <div class="fw-semibold">${bowl.name}</div>
-                        <span class="badge text-bg-light">${formatCurrency(bowl.cost)}</span>
-                      </div>
-                      <div class="text-muted small">${names.length ? names.join(', ') : 'Участников нет'}</div>
-                    </div>
-                  `;
-                })
-                .join("<hr class=\"my-2\" />")
-            : '<p class="text-muted small mb-0">Чаши ещё не добавлены.</p>'}
-        </div>
-      </div>
-    `;
-  }
-
   renderPeoplePane() {
     const container = this.elements.peoplePane;
     if (!this.state.people.length) {
@@ -636,7 +593,7 @@ class HookahSpliterApp {
                 (person) => `
                   <div class="list-group-item">
                     <div class="d-flex flex-column gap-2">
-                      <input type="text" class="form-control form-control-sm" value="${person.name}" data-role="person-name" data-person-id="${person.id}" />
+                      <input type="text" class="form-control form-control-sm" value="${escapeHtml(person.name)}" data-role="person-name" data-person-id="${person.id}" />
                       <div class="d-flex justify-content-end">
                         <button class="btn btn-sm btn-outline-danger" data-action="delete-person" data-person-id="${person.id}">Удалить</button>
                       </div>
@@ -712,8 +669,8 @@ class HookahSpliterApp {
           <div class="card-glass p-4 mb-3">
             <div class="d-flex justify-content-between align-items-start gap-2">
               <div>
-                <h3 class="h6 mb-1">${session.name}</h3>
-                <p class="text-muted small mb-2">${formatDateRange(session.startedAt, session.endedAt)}</p>
+                <h3 class="h6 mb-1">${escapeHtml(session.name)}</h3>
+                <p class="text-muted small mb-2">${escapeHtml(formatDateRange(session.startedAt, session.endedAt))}</p>
               </div>
               <span class="badge text-bg-light">${formatCurrency(session.totalCost)}</span>
             </div>
@@ -728,7 +685,7 @@ class HookahSpliterApp {
                     .map(
                       (row) => `
                         <div class="d-flex justify-content-between align-items-center mb-2">
-                          <div>${row.name}</div>
+                          <div>${escapeHtml(row.name)}</div>
                           <span class="badge text-bg-primary">${formatCurrency(row.total)}</span>
                         </div>
                       `,
@@ -741,10 +698,10 @@ class HookahSpliterApp {
                   (bowl) => `
                     <div class="mb-2">
                       <div class="d-flex justify-content-between align-items-center">
-                        <span class="fw-semibold">${bowl.name}</span>
+                        <span class="fw-semibold">${escapeHtml(bowl.name)}</span>
                         <span class="badge text-bg-light">${formatCurrency(bowl.cost)}</span>
                       </div>
-                      <div class="text-muted small">${bowl.participants.length ? bowl.participants.join(', ') : 'Участников нет'}</div>
+                      <div class="text-muted small">${bowl.participants.length ? bowl.participants.map(escapeHtml).join(', ') : 'Участников нет'}</div>
                     </div>
                   `,
                 )
