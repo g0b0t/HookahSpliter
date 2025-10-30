@@ -1,3 +1,4 @@
+
 const STORAGE_KEY = "hookahSpliterStateV2";
 
 const createInitialState = () => ({
@@ -717,3 +718,5 @@ class HookahSpliterApp {
 window.addEventListener('DOMContentLoaded', () => {
   window.app = new HookahSpliterApp();
 });
+
+document.getElementById('year')?.textContent = String(new Date().getFullYear());
