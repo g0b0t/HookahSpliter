@@ -169,6 +169,20 @@ class HookahSpliterApp {
     this.persistAndRender();
   }
 
+  deleteSavedSession(sessionId) {
+    this.state.savedSessions = this.state.savedSessions.filter(
+      (session) => session.id !== sessionId,
+    );
+    if (
+      this.state.currentSession &&
+      this.state.currentSession.id === sessionId &&
+      !this.state.currentSession.isActive
+    ) {
+      this.state.currentSession = null;
+    }
+    this.persistAndRender();
+  }
+
   addBowl() {
     const session = this.state.currentSession;
     if (!session || !session.isActive) return;
@@ -673,7 +687,17 @@ class HookahSpliterApp {
                 <h3 class="h6 mb-1">${escapeHtml(session.name)}</h3>
                 <p class="text-muted small mb-2">${escapeHtml(formatDateRange(session.startedAt, session.endedAt))}</p>
               </div>
-              <span class="badge text-bg-light">${formatCurrency(session.totalCost)}</span>
+              <div class="d-flex align-items-center gap-2">
+                <span class="badge text-bg-light">${formatCurrency(session.totalCost)}</span>
+                <button
+                  class="btn btn-sm btn-outline-danger"
+                  data-action="delete-session"
+                  data-session-id="${session.id}"
+                  type="button"
+                >
+                  Удалить
+                </button>
+              </div>
             </div>
             <div class="text-muted small mb-3">Чаш: ${session.bowlCount}</div>
             <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="collapse" data-bs-target="#${collapseId}" aria-expanded="false" aria-controls="${collapseId}">
@@ -712,6 +736,12 @@ class HookahSpliterApp {
         `;
       })
       .join('');
+
+    container.querySelectorAll('[data-action="delete-session"]').forEach((button) => {
+      button.addEventListener('click', () => {
+        this.deleteSavedSession(button.dataset.sessionId);
+      });
+    });
   }
 }
 
