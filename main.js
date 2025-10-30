@@ -719,4 +719,7 @@ window.addEventListener('DOMContentLoaded', () => {
   window.app = new HookahSpliterApp();
 });
 
-document.getElementById('year')?.textContent = String(new Date().getFullYear());
+(() => {
+  const el = document.getElementById('year');
+  if (el) el.textContent = String(new Date().getFullYear());
+})();
