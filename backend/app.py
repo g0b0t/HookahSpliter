@@ -13,6 +13,7 @@ SESSION_SECRET = os.getenv("SESSION_SECRET") or "dev"
 INITDATA_TTL_SEC = int(os.getenv("INITDATA_TTL_SEC") or "86400")
 DEV_ALLOW_ANON = os.getenv("DEV_ALLOW_ANON") == "1"
 SECURE_COOKIES = os.getenv("SECURE_COOKIES") == "1"
+DEBUG_INITDATA = os.getenv("DEBUG_INITDATA") == "1"
 
 allowed_origins = [o.strip() for o in (os.getenv("CORS_ALLOWED_ORIGINS") or "").split(",") if o.strip()]
 
@@ -60,6 +61,13 @@ def verify_init_data(init_data: str, bot_token: str, ttl_sec: int) -> dict:
     secret_key = derive_secret_key(bot_token)
     expected = hmac.new(secret_key, dcs.encode(), hashlib.sha256).hexdigest()
     if expected != provided_hash:
+        if DEBUG_INITDATA:
+            print("TG_AUTH bad_hash", {
+                "expected": expected,
+                "provided": provided_hash,
+                # В проде не печатай dcs — содержит персональные данные
+                "dcs_preview": dcs[:200] + ("..." if len(dcs) > 200 else "")
+            })
         raise HTTPException(status_code=401, detail="bad_hash")
 
     try:
@@ -78,6 +86,7 @@ def verify_init_data(init_data: str, bot_token: str, ttl_sec: int) -> dict:
         except Exception:
             user = None
     return {"user": user, "params": params}
+
 
 def make_jwt(user: dict, secret: str) -> str:
     now = int(time.time())
@@ -145,3 +154,17 @@ async def debug_env():
 @app.get("/")
 async def root():
     return {"status": "ok"}
+
+@app.post("/auth/debug")
+async def auth_debug(data: AuthIn):
+    if not data or not data.initData:
+        raise HTTPException(status_code=400, detail="no_init_data")
+    try:
+        verified = verify_init_data(data.initData, BOT_TOKEN, INITDATA_TTL_SEC)
+        return {"ok": True, "why": "ok", "user": verified.get("user")}
+    except HTTPException as e:
+        return Response(
+            content=json.dumps({"ok": False, "why": e.detail}),
+            media_type="application/json",
+            status_code=200
+        )

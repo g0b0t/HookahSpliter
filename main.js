@@ -85,31 +85,46 @@ async function initTelegramWelcome() {
   const out = document.getElementById("welcome");
   if (!out) return;
 
+  // Базовый URL бэка: локалка по умолчанию, можно переопределить window.API_BASE
+  const API_BASE = (typeof window !== "undefined" && window.API_BASE)
+    ? window.API_BASE
+    : "http://127.0.0.1:8000";
+
   let label = "Добро пожаловать, гость.";
+
   try {
+    // Telegram SDK может отсутствовать вне Mini App
     const tg = window.Telegram?.WebApp;
+    try { tg?.ready?.(); } catch {}
+
+    // Берём initData строго из Telegram.WebApp, без ручной декодировки
     const initData = tg?.initData || "";
 
     const res = await fetch(`${API_BASE}/auth/telegram`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      // если будешь авторизовываться по cookie с другого домена — раскомментируй:
+      // В проде (кросс-домен на куках) раскомментируй:
       // credentials: "include",
       body: JSON.stringify({ initData })
     });
 
-    if (res.ok) {
-      const data = await res.json();
+    let data;
+    try { data = await res.json(); } catch {}
+
+    if (!res.ok) {
+      console.warn("Auth failed:", { status: res.status, data });
+    } else {
       const u = data?.user || null;
       if (u?.first_name) {
         const fullName = [u.first_name, u.last_name].filter(Boolean).join(" ");
         label = `Добро пожаловать, ${fullName}!`;
       }
     }
-  } catch (e) {
-    console.warn("TG auth failed:", e);
+  } catch (err) {
+    console.warn("initTelegramWelcome error:", err);
+  } finally {
+    out.textContent = label;
   }
-  out.textContent = label;
 }
 
 class HookahSpliterApp {
