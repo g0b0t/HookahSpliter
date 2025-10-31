@@ -1,5 +1,7 @@
 
 const STORAGE_KEY = "hookahSpliterStateV2";
+const MAX_COST_DIGITS = 5;
+const MAX_COST_VALUE = Number("9".repeat(MAX_COST_DIGITS));
 
 const createInitialState = () => ({
   settings: {
@@ -92,6 +94,96 @@ class HookahSpliterApp {
   persistAndRender() {
     saveState(this.state);
     this.renderAll();
+  }
+
+  showValidationMessage(element, message) {
+    if (!element) {
+      if (typeof window !== "undefined" && typeof window.alert === "function") {
+        window.alert(message);
+      }
+      return;
+    }
+    element.setCustomValidity(message);
+    element.reportValidity();
+    window.setTimeout(() => element.setCustomValidity(""), 0);
+  }
+
+  validateCostValue(rawValue, inputElement) {
+    const trimmed = String(rawValue ?? "").trim();
+    if (!trimmed) {
+      this.showValidationMessage(inputElement, "Введите стоимость, используя только цифры.");
+      return null;
+    }
+    if (!/^\d+$/.test(trimmed)) {
+      this.showValidationMessage(inputElement, "Можно вводить только цифры без пробелов и символов.");
+      return null;
+    }
+    if (trimmed.length > MAX_COST_DIGITS) {
+      this.showValidationMessage(
+        inputElement,
+        `Стоимость не может содержать более ${MAX_COST_DIGITS} цифр (максимум ${MAX_COST_VALUE}).`
+      );
+      return null;
+    }
+    const numericValue = Number(trimmed);
+    if (!Number.isFinite(numericValue) || numericValue <= 0) {
+      this.showValidationMessage(inputElement, "Стоимость должна быть положительным числом.");
+      return null;
+    }
+    if (numericValue > MAX_COST_VALUE) {
+      this.showValidationMessage(
+        inputElement,
+        `Стоимость не может превышать ${MAX_COST_VALUE}.`
+      );
+      return null;
+    }
+    return numericValue;
+  }
+
+  enforceCostInputConstraints(inputElement) {
+    if (!inputElement) return;
+    const raw = inputElement.value;
+    if (raw === "") {
+      return;
+    }
+    const digitsOnly = raw.replace(/\D+/g, "");
+    let sanitized = digitsOnly;
+    let message = "";
+
+    if (digitsOnly !== raw) {
+      message = "Можно вводить только цифры без пробелов и символов.";
+    }
+
+    if (sanitized.length > MAX_COST_DIGITS) {
+      sanitized = sanitized.slice(0, MAX_COST_DIGITS);
+      message = `Стоимость не может содержать более ${MAX_COST_DIGITS} цифр (максимум ${MAX_COST_VALUE}).`;
+    }
+
+    if (sanitized !== raw) {
+      inputElement.value = sanitized;
+    }
+
+    if (message) {
+      this.showValidationMessage(inputElement, message);
+    }
+  }
+
+  setupCostInput(inputElement, initialValue, commitCallback) {
+    if (!inputElement) return;
+    const normalizedInitialValue = initialValue == null ? "" : String(initialValue);
+    inputElement.dataset.lastValidValue = normalizedInitialValue;
+    inputElement.addEventListener("input", (event) => {
+      this.enforceCostInputConstraints(event.target);
+    });
+    inputElement.addEventListener("change", (event) => {
+      const target = event.target;
+      const success = commitCallback(target);
+      if (!success) {
+        target.value = target.dataset.lastValidValue || "";
+        return;
+      }
+      target.dataset.lastValidValue = target.value;
+    });
   }
 
   renderAll() {
@@ -225,14 +317,18 @@ class HookahSpliterApp {
     this.persistAndRender();
   }
 
-  updateBowlCost(bowlId, costValue) {
+  updateBowlCost(bowlId, costValue, inputElement) {
     const session = this.state.currentSession;
-    if (!session) return;
+    if (!session) return false;
     const bowl = session.bowls.find((b) => b.id === bowlId);
-    if (!bowl) return;
-    const value = Math.max(0, Math.round(Number(costValue) || 0));
+    if (!bowl) return false;
+    const value = this.validateCostValue(costValue, inputElement);
+    if (value === null) {
+      return false;
+    }
     bowl.cost = value;
     this.persistAndRender();
+    return true;
   }
 
   addParticipantByName(name) {
@@ -276,8 +372,11 @@ class HookahSpliterApp {
     }
   }
 
-  updateDefaultBowlCost(costValue) {
-    const value = Math.max(0, Math.round(Number(costValue) || 0));
+  updateDefaultBowlCost(costValue, inputElement) {
+    const value = this.validateCostValue(costValue, inputElement);
+    if (value === null) {
+      return false;
+    }
     this.state.settings.defaultBowlCost = value;
     const session = this.state.currentSession;
     if (session && session.isActive) {
@@ -287,6 +386,7 @@ class HookahSpliterApp {
       }
     }
     this.persistAndRender();
+    return true;
   }
 
   updatePersonName(personId, name) {
@@ -450,7 +550,15 @@ class HookahSpliterApp {
             </div>
             <div>
               <label class="form-label text-uppercase small text-muted mb-1">Стоимость (₽)</label>
-              <input type="number" min="0" class="form-control" value="${activeBowl.cost}" data-role="bowl-cost" />
+              <input
+                type="number"
+                min="1"
+                max="${MAX_COST_VALUE}"
+                inputmode="numeric"
+                class="form-control"
+                value="${activeBowl.cost ?? ""}"
+                data-role="bowl-cost"
+              />
             </div>
             <div>
               <div class="d-flex justify-content-between align-items-center mb-2">
@@ -536,9 +644,11 @@ class HookahSpliterApp {
       container.querySelector('[data-role="bowl-name"]').addEventListener('input', (event) => {
         this.updateBowlName(activeBowl.id, event.target.value);
       });
-      container.querySelector('[data-role="bowl-cost"]').addEventListener('change', (event) => {
-        this.updateBowlCost(activeBowl.id, event.target.value);
-      });
+      this.setupCostInput(
+        container.querySelector('[data-role="bowl-cost"]'),
+        activeBowl.cost,
+        (input) => this.updateBowlCost(activeBowl.id, input.value, input)
+      );
 
       const addParticipantInput = container.querySelector('[data-role="participant-search"]');
       const addParticipant = () => {
@@ -655,15 +765,25 @@ class HookahSpliterApp {
         <h2 class="h6 fw-semibold mb-3">Общие настройки</h2>
         <div class="mb-3">
           <label class="form-label">Стоимость чаши по умолчанию (₽)</label>
-          <input type="number" min="0" class="form-control" value="${this.state.settings.defaultBowlCost}" data-role="default-cost" />
+          <input
+            type="number"
+            min="1"
+            max="${MAX_COST_VALUE}"
+            inputmode="numeric"
+            class="form-control"
+            value="${this.state.settings.defaultBowlCost ?? ""}"
+            data-role="default-cost"
+          />
         </div>
         <p class="text-muted small mb-0">Значение используется при создании новой чаши. Суммы всегда округляются до целого числа.</p>
       </div>
     `;
 
-    container.querySelector('[data-role="default-cost"]').addEventListener('change', (event) => {
-      this.updateDefaultBowlCost(event.target.value);
-    });
+    this.setupCostInput(
+      container.querySelector('[data-role="default-cost"]'),
+      this.state.settings.defaultBowlCost,
+      (input) => this.updateDefaultBowlCost(input.value, input)
+    );
   }
 
   renderHistoryPane() {
