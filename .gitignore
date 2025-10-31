@@ -1,0 +1,64 @@
+# --- Python cache/build ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.dist/
+build/
+pip-wheel-metadata/
+.pytest_cache/
+.mypy_cache/
+.cache/
+.coverage*
+htmlcov/
+
+# --- Виртуальные окружения ---
+.venv/
+venv/
+env/
+ENV/
+
+# --- Логи/рантайм ---
+*.log
+logs/
+*.pid
+
+# --- Базы/временные файлы (если появятся локально) ---
+*.sqlite
+*.sqlite3
+*.db
+
+# --- Секреты / токены / ключи ---
+# Главный пункт: .env и любые его варианты
+.env
+.env.*
+*.env
+
+# Прочие распространённые секреты
+*.secret
+*.secrets
+secrets.*
+credentials.json
+service_account.json
+token.json
+*.token
+*.key
+*.pem
+*.crt
+*.p12
+*.pfx
+*.keystore
+
+# Разрешаем шаблоны env-файлов (их можно коммитить)
+!.env.example
+!.env.sample
+!.env.template
+
+# --- IDE / ОС мусор ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.code-workspace
