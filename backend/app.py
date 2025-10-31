@@ -17,6 +17,13 @@ SECURE_COOKIES = os.getenv("SECURE_COOKIES") == "1"
 allowed_origins = [o.strip() for o in (os.getenv("CORS_ALLOWED_ORIGINS") or "").split(",") if o.strip()]
 
 app = FastAPI()
+@app.middleware("http")
+async def allow_private_network(request: Request, call_next):
+    # Для Chrome PNA: если preflight просит доступ к приватной сети, даём разрешение
+    response = await call_next(request)
+    if request.method == "OPTIONS" and request.headers.get("Access-Control-Request-Private-Network") == "true":
+        response.headers["Access-Control-Allow-Private-Network"] = "true"
+    return response
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins or ["*"],
