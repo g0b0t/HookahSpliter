@@ -126,3 +126,5 @@ textarea.form-control:focus {
     padding: 1rem !important;
   }
 }
+
+#welcome { min-height: 1.25rem; }

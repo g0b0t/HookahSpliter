@@ -2,6 +2,7 @@
 const STORAGE_KEY = "hookahSpliterStateV2";
 const MAX_COST_DIGITS = 5;
 const MAX_COST_VALUE = Number("9".repeat(MAX_COST_DIGITS));
+const API_BASE = "http://127.0.0.1:8000";
 
 const createInitialState = () => ({
   settings: {
@@ -78,6 +79,38 @@ const formatDateRange = (start, end) => {
   if (!endText) return startText;
   return `${startText} — ${endText}`;
 };
+
+// Отправляем initData на бэкенд и выводим «Добро пожаловать, <имя>»
+async function initTelegramWelcome() {
+  const out = document.getElementById("welcome");
+  if (!out) return;
+
+  let label = "Добро пожаловать, гость.";
+  try {
+    const tg = window.Telegram?.WebApp;
+    const initData = tg?.initData || "";
+
+    const res = await fetch(`${API_BASE}/auth/telegram`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      // если будешь авторизовываться по cookie с другого домена — раскомментируй:
+      // credentials: "include",
+      body: JSON.stringify({ initData })
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      const u = data?.user || null;
+      if (u?.first_name) {
+        const fullName = [u.first_name, u.last_name].filter(Boolean).join(" ");
+        label = `Добро пожаловать, ${fullName}!`;
+      }
+    }
+  } catch (e) {
+    console.warn("TG auth failed:", e);
+  }
+  out.textContent = label;
+}
 
 class HookahSpliterApp {
   constructor() {
@@ -865,7 +898,8 @@ class HookahSpliterApp {
   }
 }
 
-window.addEventListener('DOMContentLoaded', () => {
+window.addEventListener('DOMContentLoaded', async () => {
+  await initTelegramWelcome();
   window.app = new HookahSpliterApp();
 });
 
