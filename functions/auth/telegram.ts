@@ -1,163 +1,134 @@
-// functions/auth/telegram.ts
-// POST /auth/telegram — верификация Telegram initData и выдача JWT в __Host-sid (HttpOnly)
-
+// /functions/auth/telegram.ts
 type Env = {
-    BOT_TOKEN: string
-    SESSION_SECRET: string
-    INITDATA_TTL_SEC?: string
-    DEV_ALLOW_ANON?: string
-    DEBUG_HEADERS?: string
-  }
+    TELEGRAM_BOT_TOKEN: string;
+  };
   
-  const enc = new TextEncoder();
+  const te = new TextEncoder();
   
-  const asJson = (data: unknown, status = 200, extra: HeadersInit = {}) =>
-    new Response(JSON.stringify(data), {
+  function json(body: unknown, status = 200, extraHeaders: Record<string, string> = {}) {
+    return new Response(JSON.stringify(body), {
       status,
-      headers: { "content-type": "application/json; charset=utf-8", ...extra },
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store",
+        ...extraHeaders,
+      },
     });
-  
-  const b64url = (u8: Uint8Array) =>
-    btoa(String.fromCharCode(...u8))
-      .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/,"");
-  
-  async function hmacRaw(keyBytes: Uint8Array, data: Uint8Array) {
-    const key = await crypto.subtle.importKey("raw", keyBytes, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-    const sig = await crypto.subtle.sign("HMAC", key, data);
-    return new Uint8Array(sig);
-  }
-  async function hmacHex(keyBytes: Uint8Array, data: Uint8Array) {
-    const bytes = await hmacRaw(keyBytes, data);
-    return Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
-  }
-  async function deriveSecretKey(botToken: string) {
-    // secret_key = HMAC_SHA256(message=<bot_token>, key="WebAppData")
-    return hmacRaw(enc.encode("WebAppData"), enc.encode(botToken));
   }
   
-  function buildDataCheckString(initData: string) {
-    const sp = new URLSearchParams(initData);
-    const all: [string, string][] = [];
-    sp.forEach((v, k) => all.push([k, v]));
-    const withoutHash = all.filter(([k]) => k !== "hash")
-                           .sort((a,b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
-    const dcs = withoutHash.map(([k,v]) => `${k}=${v}`).join("\n");
-    const params = Object.fromEntries(all);
-    return { dcs, params };
+  function bufToHex(buf: ArrayBuffer): string {
+    const v = new Uint8Array(buf);
+    return Array.from(v).map(b => b.toString(16).padStart(2, "0")).join("");
   }
   
-  function timingSafeEqual(a: string, b: string) {
-    if (a.length !== b.length) return false;
-    let out = 0;
-    for (let i = 0; i < a.length; i++) out |= a.charCodeAt(i) ^ b.charCodeAt(i);
-    return out === 0;
+  async function hmacSHA256Hex(keyRaw: ArrayBuffer, msg: string): Promise<string> {
+    const key = await crypto.subtle.importKey("raw", keyRaw, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    const sig = await crypto.subtle.sign("HMAC", key, te.encode(msg));
+    return bufToHex(sig);
   }
   
-  async function makeJwtHS256(payload: Record<string, unknown>, secret: string) {
-    const header = { alg: "HS256", typ: "JWT" };
-    const p1 = b64url(enc.encode(JSON.stringify(header)));
-    const p2 = b64url(enc.encode(JSON.stringify(payload)));
-    const sig = await hmacRaw(enc.encode(secret), enc.encode(`${p1}.${p2}`));
-    const p3 = b64url(sig);
-    return `${p1}.${p2}.${p3}`;
+  async function sha256Raw(input: string): Promise<ArrayBuffer> {
+    return crypto.subtle.digest("SHA-256", te.encode(input));
   }
   
-  async function verifyInitData(initData: string, botToken: string, ttlSec: number) {
-    const { dcs, params } = buildDataCheckString(initData);
-    const provided = String(params["hash"] || "").toLowerCase();
-    if (!provided) throw new Response("bad_request", { status: 400 });
+  function buildDataCheckString(params: URLSearchParams): string {
+    // Берём все ключи кроме "hash", сортируем по алфавиту и склеиваем "k=value" через \n
+    const pairs: string[] = [];
+    const keys = Array.from(params.keys()).filter(k => k !== "hash").sort();
+    for (const k of keys) {
+      // Важно: URLSearchParams уже декодировал значение — именно так рекомендует Telegram
+      const v = params.get(k) ?? "";
+      pairs.push(`${k}=${v}`);
+    }
+    return pairs.join("\n");
+  }
   
-    const secretKey = await deriveSecretKey(botToken);
-    const expected = await hmacHex(secretKey, enc.encode(dcs));
-    if (!timingSafeEqual(expected, provided)) throw new Response("unauthorized", { status: 401 });
-  
-    const authDate = parseInt(String(params["auth_date"] || "0"), 10) || 0;
-    const now = Math.floor(Date.now()/1000);
-    if (!authDate || (now - authDate) > ttlSec) throw new Response("expired", { status: 401 });
-  
-    let user: any = null;
-    try { user = params["user"] ? JSON.parse(String(params["user"])) : null; } catch {}
-    return { user, params };
+  function parseUserFromInitData(params: URLSearchParams): any | null {
+    const raw = params.get("user");
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
   }
   
   export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
-    try {
-      const { BOT_TOKEN, SESSION_SECRET } = env;
-      const ttl = parseInt(env.INITDATA_TTL_SEC || "86400", 10);
-  
-      // Грубый лимит на тело запроса (10 КБ)
-      const cl = Number(request.headers.get("content-length") || 0);
-      if (cl > 10_000) return asJson({ error: "payload_too_large" }, 413);
-  
-      const url = new URL(request.url);
-      const origin = `${url.protocol}//${url.host}`;
-  
-      const body = await request.json().catch(() => ({} as any));
-      const initData: string | undefined = body?.initData;
-  
-      // Dev/preview режим без Telegram (по флагу)
-      if ((!initData || !initData.length) && env.DEV_ALLOW_ANON === "1") {
-        const guest = { id: 1, first_name: "Гость", last_name: "Dev" };
-        const now = Math.floor(Date.now()/1000);
-        const token = await makeJwtHS256({
-          aud: "twa",
-          iss: origin,
-          sub: String(guest.id),
-          name: `${guest.first_name} ${guest.last_name}`.trim(),
-          iat: now,
-          exp: now + 60*60*24*30,
-          tg: { id: guest.id, username: null },
-        }, SESSION_SECRET);
-  
-        const cookie = [
-          `__Host-sid=${token}`,
-          "HttpOnly",
-          "Secure",
-          "SameSite=None",
-          "Path=/",
-          `Max-Age=${60*60*24*30}`
-        ].join("; ");
-  
-        const extra: HeadersInit = { "Set-Cookie": cookie };
-        if (env.DEBUG_HEADERS === "1") (extra as any)["X-Debug-Set-Cookie"] = cookie;
-  
-        return asJson({ ok: true, user: guest }, 200, extra);
-      }
-  
-      if (!initData) return asJson({ error: "bad_request" }, 400);
-      if (!BOT_TOKEN || !SESSION_SECRET) return asJson({ error: "server_misconfigured" }, 500);
-  
-      const { user } = await verifyInitData(initData, BOT_TOKEN, ttl);
-  
-      const now = Math.floor(Date.now()/1000);
-      const token = await makeJwtHS256({
-        aud: "twa",
-        iss: origin,
-        sub: String(user?.id ?? "guest"),
-        name: `${user?.first_name ?? ""} ${user?.last_name ?? ""}`.trim() || "Гость",
-        iat: now,
-        exp: now + 60*60*24*30,
-        tg: { id: user?.id ?? null, username: user?.username ?? null },
-      }, SESSION_SECRET);
-  
-      const cookie = [
-        `__Host-sid=${token}`,
-        "HttpOnly",
-        "Secure",
-        "SameSite=None",
-        "Path=/",
-        `Max-Age=${60*60*24*30}`
-      ].join("; ");
-  
-      const extra: HeadersInit = { "Set-Cookie": cookie };
-      if (env.DEBUG_HEADERS === "1") (extra as any)["X-Debug-Set-Cookie"] = cookie;
-  
-      return asJson({ ok: true, user }, 200, extra);
-    } catch (e) {
-      // Снаружи — маскируем детали
-      console.error("auth_error", e);
-      if (e instanceof Response) return e; // уже нормирован
-      return asJson({ error: "auth_failed" }, 401);
+    if (!env.TELEGRAM_BOT_TOKEN) {
+      return json({ ok: false, reason: "server_misconfigured" }, 500);
     }
+  
+    // Ожидаем тело: { initData: string }
+    let initData: string | undefined;
+    try {
+      const body = await request.json<any>();
+      initData = body?.initData;
+    } catch {
+      /* пусто */
+    }
+    if (!initData || typeof initData !== "string") {
+      return json({ ok: false, reason: "initData_required" }, 400);
+    }
+  
+    // Разбираем initData как querystring
+    const params = new URLSearchParams(initData);
+    const hashFromClient = (params.get("hash") || "").toLowerCase();
+    if (!hashFromClient) {
+      return json({ ok: false, reason: "hash_missing" }, 400);
+    }
+  
+    // Проверка срока действия (auth_date из initData — секунды)
+    const authDateStr = params.get("auth_date");
+    if (!authDateStr) {
+      return json({ ok: false, reason: "auth_date_missing" }, 400);
+    }
+    const authDate = parseInt(authDateStr, 10);
+    if (!Number.isFinite(authDate)) {
+      return json({ ok: false, reason: "auth_date_invalid" }, 400);
+    }
+    // Разрешим до 48 часов с момента авторизации
+    const nowSec = Math.floor(Date.now() / 1000);
+    if (nowSec - authDate > 48 * 60 * 60) {
+      return json({ ok: false, reason: "auth_date_expired" }, 401);
+    }
+  
+    // Формируем data_check_string
+    const dataCheckString = buildDataCheckString(params);
+  
+    // Секрет = SHA256(bot_token)
+    const secretKeyRaw = await sha256Raw(env.TELEGRAM_BOT_TOKEN);
+  
+    // Наш HMAC
+    const ourHash = (await hmacSHA256Hex(secretKeyRaw, dataCheckString)).toLowerCase();
+  
+    if (ourHash !== hashFromClient) {
+      return json({ ok: false, reason: "invalid_signature" }, 401);
+    }
+  
+    const user = parseUserFromInitData(params);
+    const uid = user?.id ? String(user.id) : null;
+    if (!uid) {
+      return json({ ok: false, reason: "user_missing" }, 400);
+    }
+  
+    // Ставим куку tg_uid (один год). Без Domain=, чтобы надёжно прилипла на *.pages.dev
+    const oneYear = 60 * 60 * 24 * 365;
+    const setCookie = [
+      `tg_uid=${encodeURIComponent(uid)}`,
+      "Path=/",
+      "HttpOnly",
+      "Secure",
+      "SameSite=None",
+      `Max-Age=${oneYear}`,
+    ].join("; ");
+  
+    return json(
+      { ok: true, user },
+      200,
+      { "Set-Cookie": setCookie }
+    );
   };
   
+  // (опционально) можно вернуть 405 для других методов
+  export const onRequestGet: PagesFunction = async () =>
+    new Response("Method Not Allowed", { status: 405 });  

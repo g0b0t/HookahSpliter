@@ -69,8 +69,8 @@ function flushStateToCloudKeepalive() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ state: s, clientRev }),
       keepalive: true,
-    }).catch(()=>{});
-  } catch {}
+    }).catch(() => { });
+  } catch { }
 }
 
 const createInitialState = () => ({
@@ -183,14 +183,14 @@ async function initTelegramWelcome() {
   // Базовый URL бэка: локалка по умолчанию, можно переопределить window.API_BASE
   const API_BASE = (typeof window !== "undefined" && window.API_BASE)
     ? window.API_BASE
-    : "";    
+    : "";
 
   let label = "Добро пожаловать, гость.";
 
   try {
     // Telegram SDK может отсутствовать вне Mini App
     const tg = window.Telegram?.WebApp;
-    try { tg?.ready?.(); } catch {}
+    try { tg?.ready?.(); } catch { }
 
     // Берём initData строго из Telegram.WebApp, без ручной декодировки
     const initData = tg?.initData || "";
@@ -198,13 +198,12 @@ async function initTelegramWelcome() {
     const res = await fetch(`${API_BASE}/auth/telegram`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      // В проде (кросс-домен на куках) раскомментируй:
-      // credentials: "include",
+      credentials: "include",                
       body: JSON.stringify({ initData })
     });
 
     let data;
-    try { data = await res.json(); } catch {}
+    try { data = await res.json(); } catch { }
 
     if (!res.ok) {
       console.warn("Auth failed:", { status: res.status, data });
@@ -252,8 +251,8 @@ class HookahSpliterApp {
     this.state.settings = this.state.settings || {};
     if (!("theme" in this.state.settings)) this.state.settings.theme = "system";
 
-     // применяем тему сразу
-     applyTheme(this.state.settings.theme);
+    // применяем тему сразу
+    applyTheme(this.state.settings.theme);
 
     this.elements = {
       sessionPane: document.getElementById("sessionPane"),
@@ -718,8 +717,8 @@ class HookahSpliterApp {
           </div>
           <div class="list-group list-group-flush">
             ${session.bowls
-              .map(
-                (bowl) => `
+        .map(
+          (bowl) => `
                   <button
                     type="button"
                     class="list-group-item list-group-item-action ${bowl.id === activeBowl.id ? "active" : ""}"
@@ -732,13 +731,13 @@ class HookahSpliterApp {
                     </div>
                   </button>
                 `,
-              )
-              .join("")}
+        )
+        .join("")}
           </div>
         </div>
 
         ${activeBowl
-          ? `
+        ? `
           <div class="card-glass p-4 d-grid gap-3">
             <div>
               <label class="form-label text-uppercase small text-muted mb-1">Название чаши</label>
@@ -763,39 +762,39 @@ class HookahSpliterApp {
               </div>
               <ul class="list-group mb-3">
                 ${participants.length
-                  ? participants
-                      .map(
-                        (person) => `
+          ? participants
+            .map(
+              (person) => `
                           <li class="list-group-item d-flex justify-content-between align-items-center">
                             <span>${escapeHtml(person.name)}</span>
                             <button class="btn btn-sm btn-outline-danger" data-action="remove-participant" data-person-id="${person.id}">Убрать</button>
                           </li>
                         `,
-                      )
-                      .join("")
-                  : '<li class="list-group-item text-muted small">Добавьте участников в чашу</li>'}
+            )
+            .join("")
+          : '<li class="list-group-item text-muted small">Добавьте участников в чашу</li>'}
               </ul>
               <div class="input-group mb-3">
                 <input type="text" class="form-control" placeholder="Имя участника" data-role="participant-search" />
                 <button class="btn btn-primary" type="button" data-action="add-participant">Добавить</button>
               </div>
               ${availablePeople.length
-                ? `
+          ? `
                   <div class="d-flex flex-wrap gap-2">
                     ${availablePeople
-                      .map(
-                        (person) => `
+            .map(
+              (person) => `
                           <button class="tag-button" data-action="quick-add" data-person-id="${person.id}">${escapeHtml(person.name)}</button>
                         `,
-                      )
-                      .join("")}
+            )
+            .join("")}
                   </div>
                 `
-                : ''}
+          : ''}
             </div>
           </div>
         `
-          : ''}
+        : ''}
 
         <div class="card-glass p-4">
           <div class="d-flex justify-content-between align-items-center mb-3">
@@ -803,11 +802,11 @@ class HookahSpliterApp {
             <span class="badge text-bg-light">${formatCurrency(summary.total)}</span>
           </div>
           ${summary.rows.length
-            ? `
+        ? `
               <div class="list-group list-group-flush">
                 ${summary.rows
-                  .map(
-                    (row) => `
+          .map(
+            (row) => `
                       <div class="list-group-item d-flex justify-content-between align-items-center">
                         <div>
                           <div class="fw-semibold">${escapeHtml(row.name)}</div>
@@ -816,11 +815,11 @@ class HookahSpliterApp {
                         <span class="badge text-bg-primary">${formatCurrency(row.total)}</span>
                       </div>
                     `,
-                  )
-                  .join("")}
+          )
+          .join("")}
               </div>
             `
-            : '<p class="text-muted small mb-0">Добавьте участников в чаши, чтобы увидеть расчёт.</p>'}
+        : '<p class="text-muted small mb-0">Добавьте участников в чаши, чтобы увидеть расчёт.</p>'}
         </div>
       </div>
     `;
@@ -910,8 +909,8 @@ class HookahSpliterApp {
           </div>
           <div class="list-group list-group-flush">
             ${this.state.people
-              .map(
-                (person) => `
+        .map(
+          (person) => `
                   <div class="list-group-item">
                     <div class="d-flex flex-column gap-2">
                       <input type="text" class="form-control form-control-sm" value="${escapeHtml(person.name)}" data-role="person-name" data-person-id="${person.id}" />
@@ -921,8 +920,8 @@ class HookahSpliterApp {
                     </div>
                   </div>
                 `,
-              )
-              .join("")}
+        )
+        .join("")}
           </div>
         </div>
       </div>
@@ -1050,21 +1049,21 @@ class HookahSpliterApp {
             <div class="collapse mt-3" id="${collapseId}">
               <h4 class="h6 mb-2">Распределение</h4>
               ${session.summary.length
-                ? session.summary
-                    .map(
-                      (row) => `
+            ? session.summary
+              .map(
+                (row) => `
                         <div class="d-flex justify-content-between align-items-center mb-2">
                           <div>${escapeHtml(row.name)}</div>
                           <span class="badge text-bg-primary">${formatCurrency(row.total)}</span>
                         </div>
                       `,
-                    )
-                    .join("")
-                : '<p class="text-muted small mb-2">Нет участников</p>'}
+              )
+              .join("")
+            : '<p class="text-muted small mb-2">Нет участников</p>'}
               <h4 class="h6 mt-3 mb-2">Чаши</h4>
               ${session.bowls
-                .map(
-                  (bowl) => `
+            .map(
+              (bowl) => `
                     <div class="mb-2">
                       <div class="d-flex justify-content-between align-items-center">
                         <span class="fw-semibold">${escapeHtml(bowl.name)}</span>
@@ -1073,8 +1072,8 @@ class HookahSpliterApp {
                       <div class="text-muted small">${bowl.participants.length ? bowl.participants.map(escapeHtml).join(', ') : 'Участников нет'}</div>
                     </div>
                   `,
-                )
-                .join('<hr class="my-2" />')}
+            )
+            .join('<hr class="my-2" />')}
             </div>
           </div>
         `;
