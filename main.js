@@ -195,18 +195,20 @@ async function initTelegramWelcome() {
     // Берём initData строго из Telegram.WebApp, без ручной декодировки
     const initData = tg?.initData || "";
 
-    const res = await fetch(`${API_BASE}/auth/telegram`, {
+    const res = await fetch(`/auth/telegram`, {
       method: "POST",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
-      credentials: "include",                
-      body: JSON.stringify({ initData })
+      body: JSON.stringify({ initData: window.Telegram?.WebApp?.initData || "" }),
     });
 
     let data;
     try { data = await res.json(); } catch { }
 
     if (!res.ok) {
-      console.warn("Auth failed:", { status: res.status, data });
+      const t = await res.text().catch(() => "");
+      console.warn("Auth failed:", res.status, t);
+      return;
     } else {
       const u = data?.user || null;
       if (u?.first_name) {

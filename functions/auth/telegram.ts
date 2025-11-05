@@ -1,18 +1,14 @@
-// /functions/auth/telegram.ts
+// /functions/auth/telegram.ts  (Cloudflare Pages Functions)
 type Env = {
     TELEGRAM_BOT_TOKEN: string;
   };
   
   const te = new TextEncoder();
   
-  function json(body: unknown, status = 200, extraHeaders: Record<string, string> = {}) {
+  function json(body: unknown, status = 200, extra: Record<string, string> = {}) {
     return new Response(JSON.stringify(body), {
       status,
-      headers: {
-        "Content-Type": "application/json; charset=utf-8",
-        "Cache-Control": "no-store",
-        ...extraHeaders,
-      },
+      headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", ...extra },
     });
   }
   
@@ -31,26 +27,37 @@ type Env = {
     return crypto.subtle.digest("SHA-256", te.encode(input));
   }
   
-  function buildDataCheckString(params: URLSearchParams): string {
-    // Берём все ключи кроме "hash", сортируем по алфавиту и склеиваем "k=value" через \n
-    const pairs: string[] = [];
-    const keys = Array.from(params.keys()).filter(k => k !== "hash").sort();
-    for (const k of keys) {
-      // Важно: URLSearchParams уже декодировал значение — именно так рекомендует Telegram
-      const v = params.get(k) ?? "";
-      pairs.push(`${k}=${v}`);
-    }
-    return pairs.join("\n");
-  }
+  /**
+   * Строим data_check_string ИЗ СЫРОГО query-string initData:
+   * - не декодируем value (сохраняем проценты как есть!)
+   * - выбрасываем hash
+   * - сортируем по ключам (ключи можно decodeURIComponent для сортировки)
+   */
+  function buildDataCheckStringRaw(initData: string): { dataCheckString: string; hashFromClient: string; rawMap: Map<string, string> } {
+    const parts = (initData || "").split("&");
+    const rawMap = new Map<string, string>();
+    let hashFromClient = "";
   
-  function parseUserFromInitData(params: URLSearchParams): any | null {
-    const raw = params.get("user");
-    if (!raw) return null;
-    try {
-      return JSON.parse(raw);
-    } catch {
-      return null;
+    for (const p of parts) {
+      if (!p) continue;
+      const eq = p.indexOf("=");
+      const rawKey = eq >= 0 ? p.slice(0, eq) : p;
+      const rawVal = eq >= 0 ? p.slice(eq + 1) : "";
+      const keyDec = decodeURIComponent(rawKey);
+  
+      if (keyDec === "hash") {
+        // hash передаётся как hex, на всякий случай декодируем (обычно и так без %)
+        try { hashFromClient = decodeURIComponent(rawVal).toLowerCase(); }
+        catch { hashFromClient = rawVal.toLowerCase(); }
+        continue;
+      }
+      // Храним НЕдекодированный value (как в оригинальном initData)
+      rawMap.set(keyDec, rawVal);
     }
+  
+    const keys = Array.from(rawMap.keys()).sort();
+    const lines = keys.map(k => `${k}=${rawMap.get(k) ?? ""}`);
+    return { dataCheckString: lines.join("\n"), hashFromClient, rawMap };
   }
   
   export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
@@ -58,63 +65,49 @@ type Env = {
       return json({ ok: false, reason: "server_misconfigured" }, 500);
     }
   
-    // Ожидаем тело: { initData: string }
-    let initData: string | undefined;
+    // Ждём { initData: string }
+    let initData = "";
     try {
       const body = await request.json<any>();
-      initData = body?.initData;
-    } catch {
-      /* пусто */
-    }
-    if (!initData || typeof initData !== "string") {
-      return json({ ok: false, reason: "initData_required" }, 400);
-    }
+      if (typeof body?.initData === "string") initData = body.initData;
+    } catch { /* ignore */ }
   
-    // Разбираем initData как querystring
-    const params = new URLSearchParams(initData);
-    const hashFromClient = (params.get("hash") || "").toLowerCase();
-    if (!hashFromClient) {
-      return json({ ok: false, reason: "hash_missing" }, 400);
-    }
+    if (!initData) return json({ ok: false, reason: "initData_required" }, 400);
   
-    // Проверка срока действия (auth_date из initData — секунды)
-    const authDateStr = params.get("auth_date");
-    if (!authDateStr) {
-      return json({ ok: false, reason: "auth_date_missing" }, 400);
-    }
+    const { dataCheckString, hashFromClient, rawMap } = buildDataCheckStringRaw(initData);
+    if (!hashFromClient) return json({ ok: false, reason: "hash_missing" }, 400);
+  
+    // Проверка окна валидности по auth_date (секунды unix)
+    const authDateRaw = rawMap.get("auth_date") ?? "";
+    const authDateStr = decodeURIComponent(authDateRaw);
     const authDate = parseInt(authDateStr, 10);
-    if (!Number.isFinite(authDate)) {
-      return json({ ok: false, reason: "auth_date_invalid" }, 400);
-    }
-    // Разрешим до 48 часов с момента авторизации
+    if (!Number.isFinite(authDate)) return json({ ok: false, reason: "auth_date_invalid" }, 400);
+  
     const nowSec = Math.floor(Date.now() / 1000);
     if (nowSec - authDate > 48 * 60 * 60) {
-      return json({ ok: false, reason: "auth_date_expired" }, 401);
+      return json({ ok: false, reason: "auth_date_expired", server_now: nowSec, auth_date: authDate }, 401);
     }
   
-    // Формируем data_check_string
-    const dataCheckString = buildDataCheckString(params);
-  
-    // Секрет = SHA256(bot_token)
+    // Секрет = SHA256(bot_token), затем HMAC(secret, data_check_string)
     const secretKeyRaw = await sha256Raw(env.TELEGRAM_BOT_TOKEN);
-  
-    // Наш HMAC
     const ourHash = (await hmacSHA256Hex(secretKeyRaw, dataCheckString)).toLowerCase();
   
     if (ourHash !== hashFromClient) {
-      return json({ ok: false, reason: "invalid_signature" }, 401);
+      return json({ ok: false, reason: "invalid_signature", expected: ourHash, got: hashFromClient }, 401);
     }
   
-    const user = parseUserFromInitData(params);
-    const uid = user?.id ? String(user.id) : null;
-    if (!uid) {
-      return json({ ok: false, reason: "user_missing" }, 400);
+    // Подпись валидна — парсим user (тут уже можно декодировать value и JSON.parse)
+    let user: any = null;
+    const userRaw = rawMap.get("user");
+    if (userRaw) {
+      try { user = JSON.parse(decodeURIComponent(userRaw)); } catch { /* ignore */ }
     }
+    if (!user?.id) return json({ ok: false, reason: "user_missing" }, 400);
   
-    // Ставим куку tg_uid (один год). Без Domain=, чтобы надёжно прилипла на *.pages.dev
+    // Кука с tg_uid на год. Без Domain= для *.pages.dev
     const oneYear = 60 * 60 * 24 * 365;
-    const setCookie = [
-      `tg_uid=${encodeURIComponent(uid)}`,
+    const cookie = [
+      `tg_uid=${encodeURIComponent(String(user.id))}`,
       "Path=/",
       "HttpOnly",
       "Secure",
@@ -122,13 +115,8 @@ type Env = {
       `Max-Age=${oneYear}`,
     ].join("; ");
   
-    return json(
-      { ok: true, user },
-      200,
-      { "Set-Cookie": setCookie }
-    );
+    return json({ ok: true, user }, 200, { "Set-Cookie": cookie });
   };
   
-  // (опционально) можно вернуть 405 для других методов
   export const onRequestGet: PagesFunction = async () =>
     new Response("Method Not Allowed", { status: 405 });  
