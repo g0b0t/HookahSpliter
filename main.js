@@ -2,6 +2,76 @@ const STORAGE_KEY = "hookahSpliterStateV2";
 const MAX_COST_DIGITS = 5;
 const MAX_COST_VALUE = Number("9".repeat(MAX_COST_DIGITS));
 const API_BASE = "http://127.0.0.1:8000";
+const SYNC_DEBOUNCE_MS = 800;
+let clientRev = 0;
+
+async function pullStateFromCloud() {
+  try {
+    const res = await fetch(`/state`, { credentials: "include" });
+    if (!res.ok) return;
+    const server = await res.json();
+    clientRev = server._rev || 0;
+
+    const local = loadState?.() || {};
+    const merged = {
+      ...server,
+      people: Array.isArray(server.people) ? server.people : (local.people || []),
+    };
+    saveState(merged); // локально обновили — отрисует конструктор App
+    return merged;
+  } catch (e) { console.warn("pullStateFromCloud failed", e); }
+}
+
+const pushStateDebounced = (() => {
+  let t;
+  return (state) => {
+    clearTimeout(t);
+    t = setTimeout(async () => {
+      try {
+        const r = await fetch(`/state`, {
+          method: "PUT",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ state, clientRev }),
+        });
+        if (r.status === 409) {
+          const body = await r.json();
+          clientRev = body.server?._rev || 0;
+          saveState(body.server);
+          window.app && window.app.renderAll && window.app.renderAll();
+        } else if (r.ok) {
+          const body = await r.json();
+          clientRev = body.state?._rev || clientRev;
+        }
+      } catch (e) { console.warn("pushState failed", e); }
+    }, SYNC_DEBOUNCE_MS);
+  };
+})();
+
+async function saveSessionToCloud(fullSession) {
+  try {
+    const r = await fetch(`/sessions`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session: fullSession }),
+    });
+    return await r.json();
+  } catch (e) { console.warn("saveSessionToCloud failed", e); return { ok: false }; }
+}
+
+function flushStateToCloudKeepalive() {
+  try {
+    const s = loadState();
+    fetch('/state', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ state: s, clientRev }),
+      keepalive: true,
+    }).catch(()=>{});
+  } catch {}
+}
 
 const createInitialState = () => ({
   settings: {
@@ -35,10 +105,21 @@ const loadState = () => {
   }
 };
 
-const saveState = (state) => {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+// Переопределяем saveState — теперь оно ещё и пушит в облако
+saveState = (state) => {
+  saveStateLocalOnly(state);
+  pushStateDebounced(state);
 };
+
+async function listSessionsFromCloud() {
+  const r = await fetch(`/sessions`, { credentials: "include" });
+  return r.ok ? r.json() : { ok: false, sessions: [] };
+}
+
+async function loadSessionFromCloud(id) {
+  const r = await fetch(`/sessions/${id}`, { credentials: "include" });
+  return r.ok ? r.json() : { ok: false };
+}
 
 const createId = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
@@ -127,6 +208,19 @@ async function initTelegramWelcome() {
   }
 }
 
+function mergePeopleByName(serverArr, localArr) {
+  const map = new Map();
+  [...serverArr, ...localArr].forEach(p => {
+    const key = (p.name || "").trim().toLowerCase();
+    if (key) map.set(key, { ...map.get(key), ...p });
+  });
+  return [...map.values()];
+}
+
+// Сохраняем ТОЛЬКО локально (обойдём переопределение)
+const _origSaveState = saveState;
+function saveStateLocalOnly(s) { _origSaveState(s); }
+
 function getEffectiveTheme(choice) {
   if (choice === "dark") return "dark";
   if (choice === "light") return "light";
@@ -170,6 +264,7 @@ class HookahSpliterApp {
 
   persistAndRender() {
     saveState(this.state);
+    pushStateDebounced(this.state);
     this.renderAll();
   }
 
@@ -305,12 +400,26 @@ class HookahSpliterApp {
     this.persistAndRender();
   }
 
-  endSession() {
+  async endSession() {
     const session = this.state.currentSession;
     if (!session || !session.isActive) return;
 
     const endedAt = new Date().toISOString();
     const summary = this.computeSummary(session);
+    const totalCost = session.bowls.reduce((s, b) => s + (Number(b.cost) || 0), 0);
+    const full = {
+      id: session.id,
+      title: session.name || `Сессия ${new Date().toLocaleString()}`,
+      startedAt: session.startedAt,
+      endedAt,
+      people: this.state.people,
+      bowls: session.bowls,
+      totalCost,
+      summary: summary.rows,
+    };
+
+    await saveSessionToCloud(full);
+
     const personMap = this.getPersonMap();
 
     const historyEntry = {
@@ -1006,17 +1115,19 @@ function initNavAnimated() {
   update();
 }
 
-// И в обработчике DOMContentLoaded просто вызови initNavAnimated():
-window.addEventListener('DOMContentLoaded', async () => {
-  await initTelegramWelcome();
-  initNavAnimated();     // <<< добавлено
+// === СТАРТ ПРИЛОЖЕНИЯ ===
+window.addEventListener("DOMContentLoaded", async () => {
+  await initTelegramWelcome(); // тут у тебя ставится cookie tg_uid
+  await pullStateFromCloud();  // подменяем локалку облаком
+  initNavAnimated && initNavAnimated();
   window.app = new HookahSpliterApp();
 });
 
-window.addEventListener('DOMContentLoaded', async () => {
-  await initTelegramWelcome();
-  window.app = new HookahSpliterApp();
+// добивка состояния при закрытии/сворачивании
+window.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') flushStateToCloudKeepalive();
 });
+window.addEventListener('beforeunload', flushStateToCloudKeepalive);
 
 (() => {
   const el = document.getElementById('year');

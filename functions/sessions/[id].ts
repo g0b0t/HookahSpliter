@@ -1,0 +1,22 @@
+import { Env, getUserIdFromRequest, json } from "../_utils";
+
+export const onRequestGet: PagesFunction<Env> = async ({ env, request, params }) => {
+  const uid = getUserIdFromRequest(request);
+  if (!uid) return new Response("Unauthorized", { status: 401 });
+
+  const id = params?.id as string;
+  const key = `user:${uid}:session:${id}`;
+  const data = await env.HOOKAH_DATA.get(key, "json");
+  if (!data) return json({ ok: false, reason: "not_found" }, 404);
+  return json({ ok: true, session: data });
+};
+
+export const onRequestDelete: PagesFunction<Env> = async ({ env, request, params }) => {
+  const uid = getUserIdFromRequest(request);
+  if (!uid) return new Response("Unauthorized", { status: 401 });
+
+  const id = params?.id as string;
+  const key = `user:${uid}:session:${id}`;
+  await env.HOOKAH_DATA.delete(key);
+  return json({ ok: true });
+};
