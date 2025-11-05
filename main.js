@@ -17,7 +17,7 @@ async function pullStateFromCloud() {
       ...server,
       people: Array.isArray(server.people) ? server.people : (local.people || []),
     };
-    saveState(merged); // локально обновили — отрисует конструктор App
+    saveStateLocalOnly(merged);
     return merged;
   } catch (e) { console.warn("pullStateFromCloud failed", e); }
 }
@@ -105,7 +105,21 @@ const loadState = () => {
   }
 };
 
-// Переопределяем saveState — теперь оно ещё и пушит в облако
+// 1) БАЗОВОЕ сохранение в localStorage
+function saveState(state) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (e) {
+    console.warn("saveState localStorage error:", e);
+  }
+}
+
+// 2) Указатель на базовую реализацию + "только локально"
+const _origSaveState = saveState;
+function saveStateLocalOnly(s) { _origSaveState(s); }
+
+// 3) Обновляем saveState: локально + дебаунс-пуш в KV
 saveState = (state) => {
   saveStateLocalOnly(state);
   pushStateDebounced(state);
@@ -216,10 +230,6 @@ function mergePeopleByName(serverArr, localArr) {
   });
   return [...map.values()];
 }
-
-// Сохраняем ТОЛЬКО локально (обойдём переопределение)
-const _origSaveState = saveState;
-function saveStateLocalOnly(s) { _origSaveState(s); }
 
 function getEffectiveTheme(choice) {
   if (choice === "dark") return "dark";
