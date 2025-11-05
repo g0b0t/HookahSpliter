@@ -10,6 +10,16 @@
     integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH"
     crossorigin="anonymous"
   />
+  <script>
+    try {
+      const raw = localStorage.getItem("hookahSpliterStateV2");
+      const st = raw ? JSON.parse(raw) : null;
+      const choice = st?.settings?.theme || "system";
+      const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+      const mode = (choice === "dark" || (choice === "system" && prefersDark)) ? "dark" : "light";
+      document.documentElement.setAttribute("data-theme", mode);
+    } catch (e) {}
+  </script>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body class="bg-light d-flex flex-column min-vh-100">
@@ -19,7 +29,7 @@
       <div id="welcome" class="text-muted small"></div>
     </header>
 
-    <ul class="nav nav-pills nav-justified shadow-sm rounded-pill mb-3" id="mainTab" role="tablist">
+    <ul class="nav nav-pills nav-justified shadow-sm rounded-pill mb-3 nav-animated" id="mainTab" role="tablist">
       <li class="nav-item" role="presentation">
         <button
           class="nav-link active"

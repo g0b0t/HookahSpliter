@@ -6,6 +6,7 @@ const API_BASE = "http://127.0.0.1:8000";
 const createInitialState = () => ({
   settings: {
     defaultBowlCost: 500,
+    theme: "system",           // system | light | dark
   },
   people: [],
   currentSession: null,
@@ -126,15 +127,44 @@ async function initTelegramWelcome() {
   }
 }
 
+function getEffectiveTheme(choice) {
+  if (choice === "dark") return "dark";
+  if (choice === "light") return "light";
+  const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+  return prefersDark ? "dark" : "light";
+}
+
+function applyTheme(choice) {
+  const mode = getEffectiveTheme(choice || "system");
+  document.documentElement.setAttribute("data-theme", mode);
+  document.body && document.body.setAttribute("data-theme", mode);
+}
+
 class HookahSpliterApp {
   constructor() {
     this.state = loadState();
+
+    // апгрейд старого состояния
+    this.state.settings = this.state.settings || {};
+    if (!("theme" in this.state.settings)) this.state.settings.theme = "system";
+
+     // применяем тему сразу
+     applyTheme(this.state.settings.theme);
+
     this.elements = {
       sessionPane: document.getElementById("sessionPane"),
       peoplePane: document.getElementById("peoplePane"),
       settingsPane: document.getElementById("settingsPane"),
       historyPane: document.getElementById("historyPane"),
     };
+
+    // если пользователь переключит системную тему — обновим UI
+    if (window.matchMedia) {
+      window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+        if (this.state.settings.theme === "system") applyTheme("system");
+      });
+    }
+
     this.renderAll();
   }
 
@@ -807,30 +837,58 @@ class HookahSpliterApp {
 
   renderSettingsPane() {
     const container = this.elements.settingsPane;
+    const theme = this.state.settings.theme || "system";
+
     container.innerHTML = `
-      <div class="card-glass p-4">
-        <h2 class="h6 fw-semibold mb-3">Общие настройки</h2>
-        <div class="mb-3">
-          <label class="form-label">Стоимость чаши по умолчанию (₽)</label>
-          <input
-            type="number"
-            min="1"
-            max="${MAX_COST_VALUE}"
-            inputmode="numeric"
-            class="form-control"
-            value="${this.state.settings.defaultBowlCost ?? ""}"
-            data-role="default-cost"
-          />
-        </div>
-        <p class="text-muted small mb-0">Значение используется при создании новой чаши. Суммы всегда округляются до целого числа.</p>
+    <div class="card-glass p-4">
+      <h2 class="h6 fw-semibold mb-3">Общие настройки</h2>
+
+      <div class="mb-3">
+        <label class="form-label">Стоимость чаши по умолчанию (₽)</label>
+        <input
+          type="number"
+          min="1"
+          max="${MAX_COST_VALUE}"
+          inputmode="numeric"
+          class="form-control"
+          value="${this.state.settings.defaultBowlCost ?? ""}"
+          data-role="default-cost"
+        />
       </div>
-    `;
+
+      <div class="mb-1">
+        <label class="form-label d-block">Тема</label>
+        <div class="btn-group" role="group" aria-label="Переключение темы" data-role="theme-picker">
+          <input type="radio" class="btn-check" name="theme" id="t-system" value="system" ${theme === "system" ? "checked" : ""}>
+          <label class="btn btn-outline-secondary" for="t-system">Системная</label>
+
+          <input type="radio" class="btn-check" name="theme" id="t-light" value="light" ${theme === "light" ? "checked" : ""}>
+          <label class="btn btn-outline-secondary" for="t-light">Светлая</label>
+
+          <input type="radio" class="btn-check" name="theme" id="t-dark" value="dark" ${theme === "dark" ? "checked" : ""}>
+          <label class="btn btn-outline-secondary" for="t-dark">Тёмная</label>
+        </div>
+        <div class="form-text">«Системная» подстраивается под настройки ОС.</div>
+      </div>
+    </div>
+  `;
 
     this.setupCostInput(
       container.querySelector('[data-role="default-cost"]'),
       this.state.settings.defaultBowlCost,
       (input) => this.updateDefaultBowlCost(input.value, input)
     );
+
+    // обработчик темы
+    container.querySelectorAll('input[name="theme"]').forEach(radio => {
+      radio.addEventListener('change', (e) => {
+        this.state.settings.theme = e.target.value;
+        saveState(this.state);           // сохраняем без лишнего перерендера
+        applyTheme(this.state.settings.theme);
+        // при желании можно this.renderAll(); но не обязательно
+      });
+    });
+
   }
 
   renderHistoryPane() {
@@ -911,6 +969,49 @@ class HookahSpliterApp {
     });
   }
 }
+
+// Вставь этот блок где-нибудь выше DOMContentLoaded:
+function initNavAnimated() {
+  const nav = document.getElementById('mainTab');
+  if (!nav) return;
+
+  nav.classList.add('nav-animated');
+
+  // Создаём капсулу-указатель один раз
+  let indicator = nav.querySelector('.nav-indicator');
+  if (!indicator) {
+    indicator = document.createElement('span');
+    indicator.className = 'nav-indicator';
+    nav.appendChild(indicator);
+  }
+
+  const update = () => {
+    const active = nav.querySelector('.nav-link.active');
+    if (!active) return;
+
+    const navRect = nav.getBoundingClientRect();
+    const btnRect = active.getBoundingClientRect();
+
+    const left = btnRect.left - navRect.left + nav.scrollLeft;
+    indicator.style.width = `${btnRect.width}px`;
+    indicator.style.transform = `translateX(${left}px)`;
+  };
+
+  // Обновляем при показе вкладки (bootstrap 5)
+  nav.querySelectorAll('.nav-link').forEach(btn => {
+    btn.addEventListener('shown.bs.tab', update);
+  });
+
+  window.addEventListener('resize', update);
+  update();
+}
+
+// И в обработчике DOMContentLoaded просто вызови initNavAnimated():
+window.addEventListener('DOMContentLoaded', async () => {
+  await initTelegramWelcome();
+  initNavAnimated();     // <<< добавлено
+  window.app = new HookahSpliterApp();
+});
 
 window.addEventListener('DOMContentLoaded', async () => {
   await initTelegramWelcome();
