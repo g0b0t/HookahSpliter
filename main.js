@@ -1,4 +1,3 @@
-
 const STORAGE_KEY = "hookahSpliterStateV2";
 const MAX_COST_DIGITS = 5;
 const MAX_COST_VALUE = Number("9".repeat(MAX_COST_DIGITS));
@@ -88,7 +87,7 @@ async function initTelegramWelcome() {
   // Базовый URL бэка: локалка по умолчанию, можно переопределить window.API_BASE
   const API_BASE = (typeof window !== "undefined" && window.API_BASE)
     ? window.API_BASE
-    : "http://127.0.0.1:8000";
+    : "";    
 
   let label = "Добро пожаловать, гость.";
 
