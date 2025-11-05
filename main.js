@@ -5,6 +5,27 @@ const API_BASE = "";
 const SYNC_DEBOUNCE_MS = 800;
 let clientRev = 0;
 
+function getInitDataRaw() {
+  // 1) Нормальный путь: Telegram SDK
+  const tg = window.Telegram?.WebApp;
+  if (tg?.initData && tg.initData.includes("hash=")) return tg.initData;
+
+  // 2) Fallback: иногда Telegram кладёт initData в #tgWebAppData=...
+  // Там он ДВОЙНО закодирован, поэтому один раз декодируем,
+  // чтобы получить СЫРОЕ (с %xx) initData.
+  const h = typeof location !== "undefined" ? (location.hash || "") : "";
+  const m = h.match(/(?:^|[&#])tgWebAppData=([^&]+)/);
+  if (m) {
+    try { 
+      const raw = decodeURIComponent(m[1]);  // даёт строку вида user=%7B...%7D&auth_date=...&hash=...
+      if (raw.includes("hash=")) return raw;
+    } catch {}
+    if (m[1].includes("hash=")) return m[1];
+  }
+  return "";
+}
+
+
 async function pullStateFromCloud() {
   try {
     const res = await fetch(`/state`, { credentials: "include" });
@@ -180,41 +201,43 @@ async function initTelegramWelcome() {
   const out = document.getElementById("welcome");
   if (!out) return;
 
-  // Базовый URL бэка: локалка по умолчанию, можно переопределить window.API_BASE
-  const API_BASE = (typeof window !== "undefined" && window.API_BASE)
-    ? window.API_BASE
-    : "";
-
   let label = "Добро пожаловать, гость.";
 
   try {
-    // Telegram SDK может отсутствовать вне Mini App
     const tg = window.Telegram?.WebApp;
-    try { tg?.ready?.(); } catch { }
+    try { tg?.ready?.(); } catch {}
+    // иногда initData появляется не мгновенно
+    await new Promise(r => setTimeout(r, 30));
 
-    // Берём initData строго из Telegram.WebApp, без ручной декодировки
-    const initData = tg?.initData || "";
+    const initData = getInitDataRaw();
+    console.debug("TWA initData len:", initData.length, "has hash:", initData.includes("hash="));
+
+    if (!initData || !initData.includes("hash=")) {
+      console.warn("Auth skipped: initData is empty or without hash (вне Telegram WebApp?).");
+      out.textContent = label;
+      return;
+    }
 
     const res = await fetch(`/auth/telegram`, {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ initData: window.Telegram?.WebApp?.initData || "" }),
+      // ВАЖНО: отправляем «сырое» initData, не декодируя
+      body: JSON.stringify({ initData }),
     });
-
-    let data;
-    try { data = await res.json(); } catch { }
 
     if (!res.ok) {
       const t = await res.text().catch(() => "");
       console.warn("Auth failed:", res.status, t);
+      out.textContent = label;
       return;
-    } else {
-      const u = data?.user || null;
-      if (u?.first_name) {
-        const fullName = [u.first_name, u.last_name].filter(Boolean).join(" ");
-        label = `Добро пожаловать, ${fullName}!`;
-      }
+    }
+
+    const data = await res.json().catch(() => null);
+    const u = data?.user || null;
+    if (u?.first_name) {
+      const fullName = [u.first_name, u.last_name].filter(Boolean).join(" ");
+      label = `Добро пожаловать, ${fullName}!`;
     }
   } catch (err) {
     console.warn("initTelegramWelcome error:", err);
