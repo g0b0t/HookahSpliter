@@ -1,7 +1,7 @@
 const STORAGE_KEY = "hookahSpliterStateV2";
 const MAX_COST_DIGITS = 5;
 const MAX_COST_VALUE = Number("9".repeat(MAX_COST_DIGITS));
-const API_BASE = "http://127.0.0.1:8000";
+const API_BASE = "";
 const SYNC_DEBOUNCE_MS = 800;
 let clientRev = 0;
 
