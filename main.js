@@ -296,7 +296,6 @@ class HookahSpliterApp {
 
   persistAndRender() {
     saveState(this.state);
-    pushStateDebounced(this.state);
     this.renderAll();
   }
 
