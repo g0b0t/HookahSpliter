@@ -219,27 +219,32 @@ const formatDateRange = (start, end) => {
 // Отправляем initData на бэкенд, без UI «добро пожаловать»
 async function initTelegramAuth() {
   try {
-    // иногда initData появляется не мгновенно
     await new Promise(r => setTimeout(r, 30));
-
     const initData = window.initDataRaw || getInitDataRaw();
     if (!initData || !initData.includes("hash=")) {
-      console.warn("Auth skipped: initData is empty or without hash (вне Telegram WebApp?).");
+      console.info("[auth] skip: empty initData");
       return;
     }
-
     const res = await fetch(`/auth/telegram`, {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ initData }),
     });
-
-    if (!res.ok) {
-      console.warn('Auth failed:', res.status, await res.text());
-    }
+    console.info("[auth] /auth/telegram ->", res.status);
   } catch (err) {
-    console.warn("initTelegramAuth error:", err);
+    console.warn("[auth] error:", err);
+  }
+}
+
+async function pingBackend() {
+  try {
+    const r = await fetch('/ping', { cache: 'no-store', credentials: 'include' });
+    backendOnline = r.ok;
+    console.info("[ping] /ping ->", r.status);
+  } catch (e) {
+    backendOnline = false;
+    console.warn("[ping] error:", e);
   }
 }
 

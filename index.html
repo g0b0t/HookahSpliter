@@ -4,29 +4,15 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Hookah Spliter</title>
-
+  
     <!-- Ранняя инициализация темы -->
     <script src="/theme-init.js"></script>
-
-    <!-- Bootstrap (локально, без CDN) -->
+  
+    <!-- Bootstrap (локально) -->
     <link rel="stylesheet" href="/bootstrap.min.css" />
-
+  
     <!-- Стили приложения -->
     <link rel="stylesheet" href="/styles.css" />
-
-    <!-- Небольшой «сторожок»: если по какой-то причине Bootstrap не применился, подменим на локальный снова -->
-    <script>
-      // Проверяем наличие CSS-переменных Bootstrap
-      document.addEventListener('DOMContentLoaded', () => {
-        const hasBsVar = getComputedStyle(document.documentElement).getPropertyValue('--bs-body-bg');
-        if (!hasBsVar) {
-          const l = document.createElement('link');
-          l.rel = 'stylesheet';
-          l.href = '/bootstrap.min.css';
-          document.head.appendChild(l);
-        }
-      });
-    </script>
   </head>
   <body>
     <div class="container py-3">
