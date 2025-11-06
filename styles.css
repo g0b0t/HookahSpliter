@@ -82,7 +82,7 @@
   }
   
   /* =========================
-     Навигация + «плавающий» индикатор
+     Навигация (база) + индикатор
      ========================= */
   #mainTab { position: relative; }
   #mainTab .nav-link {
@@ -98,7 +98,7 @@
     background: transparent;
   }
   
-  /* Плавающий индикатор под активной вкладкой */
+  /* Плавающий индикатор (общий) */
   #mainTab .nav-indicator {
     position: absolute;
     left: 0;
@@ -112,7 +112,7 @@
     z-index: 1;
   }
   
-  /* Доп. режим с классом .nav-animated (оставлено для обратной совместимости) */
+  /* Доп. режим с классом .nav-animated (обратная совместимость) */
   .nav.nav-animated { position: relative; }
   .nav.nav-animated .nav-indicator {
     position: absolute;
@@ -123,6 +123,47 @@
     pointer-events: none;
     z-index: 1;
   }
+  
+  /* =========================
+     Капсульное меню (ВСЕГДА в одну строку)
+     ========================= */
+  #mainTab.nav-caps {
+    display: flex;
+    flex-wrap: nowrap;           /* не переносим пункты */
+    align-items: center;
+    gap: .35rem;
+    overflow: hidden;            /* чтобы не прыгало при расчёте ширин */
+  }
+  
+  /* не даём li бесконтрольно тянуться, но разрешаем сужение текста */
+  #mainTab.nav-caps .nav-item {
+    flex: 0 0 auto;
+    min-width: 0;
+  }
+  
+  /* «капсулы» */
+  #mainTab.nav-caps .nav-link {
+    border: none;
+    border-radius: 9999px;
+    padding: .45rem .9rem;
+    line-height: 1;
+    white-space: nowrap;         /* без переносов */
+    color: var(--text-muted);
+    background: transparent;
+    transition: background-color .15s ease, color .15s ease, transform .06s ease;
+    font-size: inherit;          /* размером управляет UL (через JS автофит) */
+  }
+  #mainTab.nav-caps .nav-link:hover {
+    color: var(--text-main);
+    background: var(--surface-muted);
+  }
+  #mainTab.nav-caps .nav-link.active {
+    color: #fff;
+    background: var(--accent);
+  }
+  
+  /* индикатор под капсулой скрываем (заливка активной уже даёт акцент) */
+  #mainTab.nav-caps .nav-indicator { display: none; }
   
   /* =========================
      Чип пользователя в табе «Кабинет»
@@ -150,8 +191,13 @@
     line-height: 1.1;
   }
   
+  /* Вписывание чипа в капсулу «Кабинет» */
+  #tab-user .user-chip { max-width: clamp(120px, 24vw, 200px); height: 1.4rem; }
+  #tab-user .user-avatar { width: 20px; height: 20px; }
+  #tab-user .user-handle { line-height: 1; }
+  
   /* =========================
-     Кнопки-тэги (быстрый добавление участника)
+     Кнопки-тэги (быстрое добавление участника)
      ========================= */
   .tag-button {
     border: 1px solid var(--border-soft);
@@ -164,12 +210,8 @@
     cursor: pointer;
     transition: background-color .15s ease, border-color .15s ease, transform .05s ease;
   }
-  .tag-button:hover {
-    background: var(--surface-muted);
-  }
-  .tag-button:active {
-    transform: translateY(1px);
-  }
+  .tag-button:hover { background: var(--surface-muted); }
+  .tag-button:active { transform: translateY(1px); }
   
   /* =========================
      Формы и элементы
@@ -197,18 +239,14 @@
     background: var(--accent-2);
     border-color: var(--accent-2);
   }
-  .btn-outline-danger {
-    border-radius: 12px;
-  }
+  .btn-outline-danger { border-radius: 12px; }
   
   .badge.text-bg-light {
     background: var(--surface-muted) !important;
     color: var(--text-main) !important;
     border: 1px solid var(--border-soft);
   }
-  .badge.text-bg-primary {
-    background: var(--accent) !important;
-  }
+  .badge.text-bg-primary { background: var(--accent) !important; }
   
   /* List group */
   .list-group-item {
@@ -229,14 +267,8 @@
   }
   
   /* Выделение текста */
-  ::selection {
-    background: rgba(10,132,255,.2);
-    color: #000;
-  }
-  body[data-theme="dark"] ::selection {
-    background: rgba(10,132,255,.35);
-    color: #fff;
-  }
+  ::selection { background: rgba(10,132,255,.2); color: #000; }
+  body[data-theme="dark"] ::selection { background: rgba(10,132,255,.35); color: #fff; }
   
   /* Футер */
   footer { opacity: .9; }

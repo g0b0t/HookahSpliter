@@ -1190,7 +1190,57 @@ class HookahSpliterApp {
   }
 }
 
-// Вставь этот блок где-нибудь выше DOMContentLoaded:
+// Универсальный авто-фит для всей навигации: уменьшает font-size у UL,
+// пока суммарная ширина пунктов не влезет в контейнер.
+function fitNavFont() {
+  const nav = document.getElementById('mainTab');
+  if (!nav) return;
+
+  const min = Number(nav.dataset.minFont || 10);
+  const max = Number(nav.dataset.maxFont || 14);
+
+  // Сбрасываем на максимум и считаем
+  let size = max;
+  nav.style.fontSize = size + 'px';
+
+  const items = Array.from(nav.querySelectorAll(':scope > li'));
+  if (!items.length) return;
+
+  const totalWidth = () => {
+    // берём реальную ширину элементов
+    return items.reduce((sum, li) => sum + li.getBoundingClientRect().width, 0);
+  };
+
+  // Пока не влезает — уменьшаем на 0.5px
+  let guard = 0;
+  const containerWidth = nav.clientWidth;
+  while (size > min && totalWidth() > containerWidth && guard < 40) {
+    size -= 0.5;
+    nav.style.fontSize = size + 'px';
+    guard++;
+  }
+}
+
+// Оборачиваем с троттлом, чтобы не дёргать часто
+function throttle(fn, ms) {
+  let t = 0;
+  return (...args) => {
+    const now = performance.now();
+    if (now - t > ms) {
+      t = now;
+      fn(...args);
+    }
+  };
+}
+const fitNavFontThrottled = throttle(() => {
+  fitNavFont();
+  // после общего фитта — подгоняем ник в чипе ещё раз
+  const chip = document.querySelector('#tab-user .user-chip');
+  const handle = chip?.querySelector('.user-handle');
+  if (chip && handle) autoFitFont(handle, chip);
+}, 50);
+
+
 function initNavAnimated() {
   const nav = document.getElementById('mainTab');
   if (!nav) return;
@@ -1215,6 +1265,9 @@ function initNavAnimated() {
     const left = btnRect.left - navRect.left + nav.scrollLeft;
     indicator.style.width = `${btnRect.width}px`;
     indicator.style.transform = `translateX(${left}px)`;
+
+    // каждый раз, когда таб меняется, проверяем, влазит ли меню
+    fitNavFontThrottled();
   };
 
   // Обновляем при показе вкладки (bootstrap 5)
@@ -1222,7 +1275,14 @@ function initNavAnimated() {
     btn.addEventListener('shown.bs.tab', update);
   });
 
-  window.addEventListener('resize', update);
+  window.addEventListener('resize', () => {
+    update();
+    fitNavFontThrottled();
+  });
+  window.addEventListener('orientationchange', () => {
+    fitNavFontThrottled();
+  });
+
   update();
 }
 
@@ -1236,6 +1296,9 @@ window.addEventListener("DOMContentLoaded", async () => {
   initNavAnimated && initNavAnimated();
   window.app = new HookahSpliterApp();
   initUserHeader().catch(() => {});
+
+  // первичный авто-фит после рендера
+  fitNavFontThrottled();
 });
 
 // добивка состояния при закрытии/сворачивании
