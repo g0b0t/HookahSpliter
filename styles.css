@@ -289,3 +289,40 @@
     will-change: opacity, transform;
   }
   
+/* === ЕДИНЫЕ размеры капсул для всех пунктов меню === */
+:root { --pill-h: 32px; --pill-pad-x: .75rem; }
+
+#mainTab.nav-caps .nav-link{
+  display: flex;
+  align-items: center;
+  height: var(--pill-h);
+  padding: 0 var(--pill-pad-x);
+  border-radius: calc(var(--pill-h) / 2);
+  line-height: 1;             /* чтобы высота шла по контейнеру, а не тексту */
+  font-size: inherit;
+}
+
+/* Делаем «кабинет» тем же размером, что и другие капсулы */
+#tab-user.nav-link{
+  max-width: clamp(120px, 42vw, 220px); /* не раздуваемся на узких экранах */
+  overflow: hidden;
+}
+
+/* Чип пользователя вписываем в высоту капсулы */
+#tab-user .user-chip{
+  height: 100%;
+  max-width: 100%;
+  gap: .45rem;
+}
+#tab-user .user-avatar{
+  width: calc(var(--pill-h) - 12px);
+  height: calc(var(--pill-h) - 12px);
+}
+#tab-user .user-handle{
+  line-height: 1;
+}
+
+/* Чуть ужимаем всё меню на очень узких экранах */
+@media (max-width: 380px){
+  :root { --pill-h: 30px; --pill-pad-x: .6rem; }
+}
