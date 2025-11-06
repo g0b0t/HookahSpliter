@@ -23,7 +23,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ env, request }) => {
   const uid = getUserIdFromRequest(request);
   if (!uid) return new Response("Unauthorized", { status: 401 });
 
-  const body = await request.json<any>();
+  let body: any;
+  try {
+    body = await request.json<any>();
+  } catch {
+    return json({ ok: false, reason: "invalid_json" }, 400);
+  }
   const session = body.session || body; // допускаем оба варианта
   if (!session?.id) return json({ ok: false, reason: "missing session.id" }, 400);
 
