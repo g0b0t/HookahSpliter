@@ -113,7 +113,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       expected_decoded_sha: expect_decoded_sha,
       expected_raw_token: expect_raw_token,
       expected_decoded_token: expect_decoded_tok,
-      rawSHA: secretSha
+      tok: token
     }, 401);
   }
 
