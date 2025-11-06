@@ -326,3 +326,24 @@
 @media (max-width: 380px){
   :root { --pill-h: 30px; --pill-pad-x: .6rem; }
 }
+
+/* === Центровка всей полосы табов и безопасные отступы от краёв экрана === */
+#mainTab.nav-caps{
+  justify-content: center;                                /* центрируем ВСЕ пункты */
+  padding-left:  calc(env(safe-area-inset-left, 0px) + .5rem);
+  padding-right: calc(env(safe-area-inset-right, 0px) + .5rem);
+  overflow: visible;                                      /* не обрезаем активную капсулу */
+}
+
+/* Чип пользователя: ограничим ширину кнопки, чтобы «пузырь» не упирался в край */
+#tab-user.nav-link{
+  max-width: clamp(120px, 40vw, 220px);                   /* на узких — не шире 40% экрана */
+}
+
+/* На очень узких экранах — чуть больше внутреннего отступа, чтобы «пузырь» точно не резался */
+@media (max-width: 420px){
+  #mainTab.nav-caps{
+    padding-left:  calc(env(safe-area-inset-left, 0px) + .75rem);
+    padding-right: calc(env(safe-area-inset-right, 0px) + .75rem);
+  }
+}
