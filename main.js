@@ -241,10 +241,8 @@ async function pingBackend() {
   try {
     const r = await fetch('/ping', { cache: 'no-store', credentials: 'include' });
     backendOnline = r.ok;
-    console.info("[ping] /ping ->", r.status);
-  } catch (e) {
+  } catch {
     backendOnline = false;
-    console.warn("[ping] error:", e);
   }
 }
 
@@ -300,14 +298,22 @@ async function pingBackend() {
   }
 }
 
+function getTgUser() {
+  return window.tg?.initDataUnsafe?.user || null;
+}
+
 async function initUserHeader() {
   await pingBackend();
   if (!backendOnline) {
     setUserChip({ username: null, photoUrl: null, online: false });
     return;
   }
-  const username = window.initDataUnsafe?.username || null;
-  const photoUrl = window.initDataUnsafe?.photo_url || null;
+  const user = getTgUser();
+  const username = user?.username || null;
+  const photoUrl = user?.photo_url || null;
+
+  console.info('[chip]', { backendOnline, tgUser: getTgUser() });
+
   setUserChip({ username, photoUrl, online: true });
 }
 
