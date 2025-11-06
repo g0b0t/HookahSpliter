@@ -6,7 +6,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
   const t = env.TELEGRAM_BOT_TOKEN || "";
   const ok = !!t;
   const h = ok ? await crypto.subtle.digest("SHA-256", te.encode(t)) : null;
-  return new Response(JSON.stringify({ ok, token_sha256_8: h ? hex(h).slice(0,8) : null }), {
+  return new Response(JSON.stringify({ ok, token_sha256_8: h}), {
     headers: { "Content-Type": "application/json" }
   });
 };
