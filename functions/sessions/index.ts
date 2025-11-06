@@ -5,16 +5,31 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
   if (!uid) return new Response("Unauthorized", { status: 401 });
 
   const prefix = `user:${uid}:session:`;
-  const items = await env.HOOKAH_DATA.list<{ id: string; title?: string; startedAt?: number; endedAt?: number; totalCost?: number }>({ prefix });
+  let cursor: string | undefined;
+  const metas: Array<{ id: string; title: string; startedAt: number; endedAt: number; totalCost: number }> = [];
 
-  // Отдаём только metadata (быстро)
-  const metas = items.keys.map(k => ({
-    id: k.metadata?.id || k.name.slice(prefix.length),
-    title: k.metadata?.title ?? "",
-    startedAt: k.metadata?.startedAt ?? 0,
-    endedAt: k.metadata?.endedAt ?? 0,
-    totalCost: k.metadata?.totalCost ?? 0,
-  }));
+  while (true) {
+    const page = await env.HOOKAH_DATA.list<{
+      id: string;
+      title?: string;
+      startedAt?: number;
+      endedAt?: number;
+      totalCost?: number;
+    }>({ prefix, cursor });
+
+    for (const key of page.keys) {
+      metas.push({
+        id: key.metadata?.id || key.name.slice(prefix.length),
+        title: key.metadata?.title ?? "",
+        startedAt: key.metadata?.startedAt ?? 0,
+        endedAt: key.metadata?.endedAt ?? 0,
+        totalCost: key.metadata?.totalCost ?? 0,
+      });
+    }
+
+    if (page.list_complete || !page.cursor) break;
+    cursor = page.cursor;
+  }
 
   return json({ ok: true, sessions: metas });
 };
