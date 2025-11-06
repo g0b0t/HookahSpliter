@@ -17,21 +17,18 @@
   <div class="container py-3" id="app">
     <header class="text-center mb-3">
       <h1 class="h4 fw-semibold mb-1">Hookah Spliter</h1>
-      <div id="welcome" class="text-muted small"></div>
     </header>
 
     <ul class="nav nav-pills nav-justified shadow-sm rounded-pill mb-3 nav-animated" id="mainTab" role="tablist">
-      <li class="nav-item" role="presentation">
-        <button
-          class="nav-link active"
-          id="session-tab"
-          data-bs-toggle="tab"
-          data-bs-target="#sessionPane"
-          type="button"
-          role="tab"
-          aria-controls="sessionPane"
-          aria-selected="true"
-        >Сессия</button>
+      <li class="nav-item">
+        <button class="nav-link" id="tab-user"
+                data-bs-toggle="tab" data-bs-target="#tab-sessions" type="button" role="tab"
+                aria-controls="tab-sessions" aria-selected="false">
+          <span class="user-chip">
+            <img class="user-avatar" alt="" hidden>
+            <span class="user-handle" data-min-font="10" data-max-font="14">Гость</span>
+          </span>
+        </button>
       </li>
       <li class="nav-item" role="presentation">
         <button

@@ -25,6 +25,12 @@ function getInitDataRaw() {
   return "";
 }
 
+// === Telegram globals for reuse ===
+window.tg = window.Telegram?.WebApp || null;
+try { window.tg?.ready?.(); } catch {}
+window.initDataUnsafe = window.tg?.initDataUnsafe || null;
+// cache once; still can be recomputed via getInitDataRaw() if needed
+window.initDataRaw = (typeof window !== "undefined") ? (getInitDataRaw() || "") : "";
 
 async function pullStateFromCloud() {
   try {
@@ -44,7 +50,7 @@ async function pullStateFromCloud() {
 }
 
 const pushStateDebounced = (() => {
-  let t;
+  let t = null;
   return (state) => {
     clearTimeout(t);
     t = setTimeout(async () => {
@@ -75,10 +81,14 @@ async function saveSessionToCloud(fullSession) {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ session: fullSession }),
+      body: JSON.stringify(fullSession),
     });
-    return await r.json();
-  } catch (e) { console.warn("saveSessionToCloud failed", e); return { ok: false }; }
+    if (!r.ok) {
+      console.warn("saveSessionToCloud failed:", r.status, await r.text());
+    }
+  } catch (e) {
+    console.warn("saveSessionToCloud error:", e);
+  }
 }
 
 function flushStateToCloudKeepalive() {
@@ -113,9 +123,12 @@ const loadState = () => {
     if (!raw) return createInitialState();
     const parsed = JSON.parse(raw);
     return {
-      ...createInitialState(),
-      ...parsed,
-      settings: { ...createInitialState().settings, ...(parsed.settings || {}) },
+      settings: {
+        defaultBowlCost: Number.isFinite(parsed?.settings?.defaultBowlCost)
+          ? parsed.settings.defaultBowlCost
+          : 500,
+        theme: parsed?.settings?.theme || "system",
+      },
       people: Array.isArray(parsed.people) ? parsed.people : [],
       savedSessions: Array.isArray(parsed.savedSessions) ? parsed.savedSessions : [],
       currentSession: parsed.currentSession || null,
@@ -146,9 +159,15 @@ saveState = (state) => {
   pushStateDebounced(state);
 };
 
-async function listSessionsFromCloud() {
-  const r = await fetch(`/sessions`, { credentials: "include" });
-  return r.ok ? r.json() : { ok: false, sessions: [] };
+async function loadSessionsFromCloud() {
+  try {
+    const r = await fetch(`/sessions`, { credentials: "include" });
+    if (!r.ok) return [];
+    return await r.json();
+  } catch (e) {
+    console.warn("loadSessionsFromCloud failed", e);
+    return [];
+  }
 }
 
 async function loadSessionFromCloud(id) {
@@ -182,7 +201,8 @@ const formatDateTime = (isoString) => {
   return `${date.toLocaleDateString("ru-RU", {
     day: "2-digit",
     month: "2-digit",
-  })}, ${date.toLocaleTimeString("ru-RU", {
+    year: "numeric",
+  })} ${date.toLocaleTimeString("ru-RU", {
     hour: "2-digit",
     minute: "2-digit",
   })}`;
@@ -196,25 +216,15 @@ const formatDateRange = (start, end) => {
   return `${startText} — ${endText}`;
 };
 
-// Отправляем initData на бэкенд и выводим «Добро пожаловать, <имя>»
-async function initTelegramWelcome() {
-  const out = document.getElementById("welcome");
-  if (!out) return;
-
-  let label = "Добро пожаловать, гость.";
-
+// Отправляем initData на бэкенд, без UI «добро пожаловать»
+async function initTelegramAuth() {
   try {
-    const tg = window.Telegram?.WebApp;
-    try { tg?.ready?.(); } catch {}
     // иногда initData появляется не мгновенно
     await new Promise(r => setTimeout(r, 30));
 
-    const initData = getInitDataRaw();
-    console.debug("TWA initData len:", initData.length, "has hash:", initData.includes("hash="));
-
+    const initData = window.initDataRaw || getInitDataRaw();
     if (!initData || !initData.includes("hash=")) {
       console.warn("Auth skipped: initData is empty or without hash (вне Telegram WebApp?).");
-      out.textContent = label;
       return;
     }
 
@@ -222,33 +232,95 @@ async function initTelegramWelcome() {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
-      // ВАЖНО: отправляем «сырое» initData, не декодируя
       body: JSON.stringify({ initData }),
     });
 
     if (!res.ok) {
       console.warn('Auth failed:', res.status, await res.text());
-      return;
-    }
-
-    const data = await res.json().catch(() => null);
-    const u = data?.user || null;
-    if (u?.first_name) {
-      const fullName = [u.first_name, u.last_name].filter(Boolean).join(" ");
-      label = `Добро пожаловать, ${fullName}!`;
     }
   } catch (err) {
-    console.warn("initTelegramWelcome error:", err);
-  } finally {
-    out.textContent = label;
+    console.warn("initTelegramAuth error:", err);
   }
+}
+
+// === User chip (аватар + ник @handle в табе) ===
+let backendOnline = false;
+
+function autoFitFont(textEl, container) {
+  if (!textEl || !container) return;
+  const min = Number(textEl.dataset.minFont || 10);
+  const max = Number(textEl.dataset.maxFont || 14);
+  let size = max;
+  textEl.style.fontSize = size + 'px';
+  // небольшая подстраховка на паддинги/иконки
+  const pad = 8;
+  const maxWidth = container.clientWidth - pad;
+  while (size > min && textEl.scrollWidth > maxWidth) {
+    size -= 0.5;
+    textEl.style.fontSize = size + 'px';
+  }
+}
+
+function setUserChip({ username, photoUrl, online }) {
+  const chip = document.querySelector('#tab-user .user-chip');
+  if (!chip) return;
+  const avatar = chip.querySelector('.user-avatar');
+  const handle = chip.querySelector('.user-handle');
+
+  if (online && username) {
+    handle.textContent = '@' + username;
+  } else {
+    handle.textContent = 'Гость';
+  }
+
+  if (online && photoUrl) {
+    avatar.src = photoUrl;
+    avatar.hidden = false;
+  } else {
+    avatar.removeAttribute('src');
+    avatar.hidden = true;
+  }
+
+  autoFitFont(handle, chip);
+  // обновим позицию индикатора вкладок, если есть
+  try { window.dispatchEvent(new Event('resize')); } catch {}
+}
+
+async function pingBackend() {
+  try {
+    const r = await fetch('/ping', { cache: 'no-store' });
+    backendOnline = r.ok;
+  } catch {
+    backendOnline = false;
+  }
+}
+
+async function initUserHeader() {
+  await pingBackend();
+  if (!backendOnline) {
+    setUserChip({ username: null, photoUrl: null, online: false });
+    return;
+  }
+  const username = window.initDataUnsafe?.username || null;
+  const photoUrl = window.initDataUnsafe?.photo_url || null;
+  setUserChip({ username, photoUrl, online: true });
 }
 
 function mergePeopleByName(serverArr, localArr) {
   const map = new Map();
   [...serverArr, ...localArr].forEach(p => {
     const key = (p.name || "").trim().toLowerCase();
-    if (key) map.set(key, { ...map.get(key), ...p });
+    if (!key) return;
+    const prev = map.get(key);
+    if (!prev) {
+      map.set(key, { ...p });
+    } else {
+      map.set(key, {
+        ...prev,
+        id: prev.id || p.id,
+        name: prev.name || p.name,
+      });
+    }
   });
   return [...map.values()];
 }
@@ -345,8 +417,9 @@ class HookahSpliterApp {
 
   enforceCostInputConstraints(inputElement) {
     if (!inputElement) return;
-    const raw = inputElement.value;
-    if (raw === "") {
+    const raw = String(inputElement.value ?? "");
+    if (!raw) {
+      inputElement.value = "";
       return;
     }
     const digitsOnly = raw.replace(/\D+/g, "");
@@ -378,11 +451,13 @@ class HookahSpliterApp {
     inputElement.addEventListener("input", (event) => {
       this.enforceCostInputConstraints(event.target);
     });
-    inputElement.addEventListener("change", (event) => {
+    inputElement.addEventListener("blur", (event) => {
       const target = event.target;
-      const success = commitCallback(target);
-      if (!success) {
-        target.value = target.dataset.lastValidValue || "";
+      const ok = commitCallback?.(target);
+      if (ok === false) {
+        // вернуть предыдущее валидное значение
+        const last = target.dataset.lastValidValue ?? "";
+        target.value = last;
         return;
       }
       target.dataset.lastValidValue = target.value;
@@ -417,6 +492,7 @@ class HookahSpliterApp {
       id: createId(),
       name: trimmed,
       startedAt: new Date().toISOString(),
+      endedAt: null,
       isActive: true,
       bowls: [
         {
@@ -482,13 +558,6 @@ class HookahSpliterApp {
     this.state.savedSessions = this.state.savedSessions.filter(
       (session) => session.id !== sessionId,
     );
-    if (
-      this.state.currentSession &&
-      this.state.currentSession.id === sessionId &&
-      !this.state.currentSession.isActive
-    ) {
-      this.state.currentSession = null;
-    }
     this.persistAndRender();
   }
 
@@ -749,7 +818,7 @@ class HookahSpliterApp {
                   >
                     <div class="d-flex justify-content-between align-items-center">
                       <span>${escapeHtml(bowl.name)}</span>
-                      <span class="badge ${bowl.id === activeBowl.id ? "bg-light text-dark" : "text-bg-light"}">${bowl.participantIds.length}</span>
+                      <span class="badge ${bowl.id === activeBowl.id ? "text-bg-dark" : "text-bg-light"}">${bowl.participantIds.length}</span>
                     </div>
                   </button>
                 `,
@@ -935,7 +1004,7 @@ class HookahSpliterApp {
           (person) => `
                   <div class="list-group-item">
                     <div class="d-flex flex-column gap-2">
-                      <input type="text" class="form-control form-control-sm" value="${escapeHtml(person.name)}" data-role="person-name" data-person-id="${person.id}" />
+                      <input type="text" class="form-control" value="${escapeHtml(person.name)}" data-role="person-name" data-person-id="${person.id}" />
                       <div class="d-flex justify-content-end">
                         <button class="btn btn-sm btn-outline-danger" data-action="delete-person" data-person-id="${person.id}">Удалить</button>
                       </div>
@@ -1091,7 +1160,7 @@ class HookahSpliterApp {
                         <span class="fw-semibold">${escapeHtml(bowl.name)}</span>
                         <span class="badge text-bg-light">${formatCurrency(bowl.cost)}</span>
                       </div>
-                      <div class="text-muted small">${bowl.participants.length ? bowl.participants.map(escapeHtml).join(', ') : 'Участников нет'}</div>
+                      <div class="text-muted small">${bowl.participants?.length ? bowl.participants.map(escapeHtml).join(', ') : 'Участников нет'}</div>
                     </div>
                   `,
             )
@@ -1148,10 +1217,14 @@ function initNavAnimated() {
 
 // === СТАРТ ПРИЛОЖЕНИЯ ===
 window.addEventListener("DOMContentLoaded", async () => {
-  await initTelegramWelcome(); // тут у тебя ставится cookie tg_uid
+  // если в верстке остался элемент приветствия — уберём
+  (function(){ const w = document.getElementById('welcome'); if (w) w.remove(); })();
+  await initTelegramAuth(); // только авторизация, без UI
+
   await pullStateFromCloud();  // подменяем локалку облаком
   initNavAnimated && initNavAnimated();
   window.app = new HookahSpliterApp();
+  initUserHeader().catch(() => {});
 });
 
 // добивка состояния при закрытии/сворачивании

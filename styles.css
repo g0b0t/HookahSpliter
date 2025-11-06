@@ -314,3 +314,17 @@ body[data-theme="dark"] ::selection {
   background: rgba(10,132,255,.35);
   color: #fff;
 }
+
+/* === User tab chip === */
+.user-chip{
+  display:flex; align-items:center; gap:.5rem;
+  max-width: 180px; height: 1.75rem; /* под высоту таба */
+}
+.user-avatar{
+  width: 22px; height: 22px; border-radius: 50%;
+  object-fit: cover; flex: 0 0 auto;
+}
+.user-handle{
+  display:block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  line-height: 1.1; /* компактнее */
+}
