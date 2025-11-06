@@ -227,9 +227,7 @@ async function initTelegramWelcome() {
     });
 
     if (!res.ok) {
-      const t = await res.text().catch(() => "");
-      console.warn("Auth failed:", res.status, t);
-      out.textContent = label;
+      console.warn('Auth failed:', res.status, await res.text());
       return;
     }
 
