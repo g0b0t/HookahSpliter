@@ -1,26 +1,29 @@
-// /functions/auth/telegram.ts — супер-диагностика
+// /functions/auth/telegram.ts — валидация initData по новой формуле Telegram
+// секрет = HMAC_SHA256(bot_token, key="WebAppData")
+// hash = HMAC_SHA256(data_check_string, key=секрет)
 type Env = { TELEGRAM_BOT_TOKEN: string };
 
 const te = new TextEncoder();
 const hex = (ab: ArrayBuffer) => Array.from(new Uint8Array(ab)).map(b => b.toString(16).padStart(2,"0")).join("");
-const short = (s: string, n = 80) => (s.length > n ? s.slice(0, n) + "…(" + s.length + ")" : s + " (" + s.length + ")");
 
-async function sha256Raw(s: string) { return crypto.subtle.digest("SHA-256", te.encode(s)); }
-async function hmacHex(keyRaw: ArrayBuffer, msg: string) {
+async function hmacHexWithKeyRaw(keyRaw: ArrayBuffer, msg: string) {
   const key = await crypto.subtle.importKey("raw", keyRaw, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   const sig = await crypto.subtle.sign("HMAC", key, te.encode(msg));
   return hex(sig).toLowerCase();
 }
-async function hmacHexByToken(token: string, msg: string) {
-  const raw = te.encode(token);
-  const key = await crypto.subtle.importKey("raw", raw, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+async function hmacHexWithKeyString(keyStr: string, msg: string) {
+  const keyRaw = te.encode(keyStr);
+  const key = await crypto.subtle.importKey("raw", keyRaw, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   const sig = await crypto.subtle.sign("HMAC", key, te.encode(msg));
   return hex(sig).toLowerCase();
 }
+async function sha256Raw(s: string) {
+  return crypto.subtle.digest("SHA-256", te.encode(s));
+}
 
-// ===== DCS builders =====
+// -------- DCS builders --------
 
-// RAW: значения НЕ декодируем (оставляем %xx), сортируем по ключам (имена ключей ASCII)
+// RAW: значения не декодируем (оставляем %xx), сортируем по ключам; в строку кладём k(декод) = v(сырое)
 function buildDCSRaw(initData: string) {
   const parts = (initData || "").split("&").filter(Boolean);
   const map = new Map<string, { rawK: string; rawV: string }>();
@@ -34,27 +37,30 @@ function buildDCSRaw(initData: string) {
       try { hash = decodeURIComponent(rawV).toLowerCase(); } catch { hash = rawV.toLowerCase(); }
       continue;
     }
+    if (k === "signature") continue; // signature не участвует в DCS для hash
     map.set(k, { rawK, rawV });
   }
   const keys = Array.from(map.keys()).sort();
-  const lines = keys.map(k => `${k}=${map.get(k)!.rawV}`);
-  return { dcs: lines.join("\n"), hash, keys, valsPreview: keys.map(k => [k, short(map.get(k)!.rawV)]) };
+  const dcs = keys.map(k => `${k}=${map.get(k)!.rawV}`).join("\n");
+  return { dcs, hash };
 }
 
-// DECODED: значения уже декодированы, сортировка по ключам
+// DECODED: стандартный вариант через URLSearchParams (values декодированы), исключаем hash и signature
 function buildDCSDecoded(initData: string) {
   const usp = new URLSearchParams(initData);
   const hash = (usp.get("hash") || "").toLowerCase();
   usp.delete("hash");
+  usp.delete("signature");
   const entries = Array.from(usp.entries()).sort(([a],[b]) => a.localeCompare(b));
-  const lines = entries.map(([k, v]) => `${k}=${v}`);
-  const keys = entries.map(([k]) => k);
-  const valsPreview = entries.map(([k,v]) => [k, short(v)]);
-  return { dcs: lines.join("\n"), hash, keys, valsPreview };
+  const dcs = entries.map(([k,v]) => `${k}=${v}`).join("\n");
+  return { dcs, hash };
 }
 
 function json(body: unknown, status = 200, extra: Record<string,string> = {}) {
-  return new Response(JSON.stringify(body), { status, headers: { "Content-Type":"application/json; charset=utf-8", "Cache-Control":"no-store", ...extra } });
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type":"application/json; charset=utf-8", "Cache-Control":"no-store", ...extra },
+  });
 }
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
@@ -68,69 +74,82 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   } catch {}
   if (!initData) return json({ ok:false, reason:"initData_required" }, 400);
 
-  // Срок действия
-  const authDate = parseInt(new URLSearchParams(initData).get("auth_date") || "0", 10);
+  // Проверка срока
+  const authDateStr = new URLSearchParams(initData).get("auth_date") || "0";
+  const authDate = parseInt(authDateStr, 10);
   if (!Number.isFinite(authDate)) return json({ ok:false, reason:"auth_date_invalid" }, 400);
   const nowSec = Math.floor(Date.now()/1000);
   if (nowSec - authDate > 48*60*60) return json({ ok:false, reason:"auth_date_expired", now:nowSec, auth_date:authDate }, 401);
 
-  // DCS оба варианта
+  // DCS (оба варианта)
   const raw = buildDCSRaw(initData);
   const dec = buildDCSDecoded(initData);
-
   const clientHash = raw.hash || dec.hash || "";
   if (!clientHash) return json({ ok:false, reason:"hash_missing" }, 400);
 
-  // 4 подписи
-  const secretSha = await sha256Raw(token);
-  const expect_raw_sha     = await hmacHex(secretSha, raw.dcs);
-  const expect_decoded_sha = await hmacHex(secretSha, dec.dcs);
-  const expect_raw_token   = await hmacHexByToken(token, raw.dcs);
-  const expect_decoded_tok = await hmacHexByToken(token, dec.dcs);
+  // --- ключи для подписи ---
+  // 1) НОВЫЙ правильный секрет: HMAC(key="WebAppData", msg=token)
+  //    см. core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app
+  //    "secret key, which is the HMAC-SHA-256 signature of the bot's token with the constant string `WebAppData` used as a key"
+  const secret_webapp_hex = await hmacHexWithKeyString("WebAppData", token);
+  const secret_webapp_raw = Uint8Array.from(secret_webapp_hex.match(/.{1,2}/g)!.map(h => parseInt(h, 16))).buffer;
 
-  let mode: string | null = null;
-  if (clientHash === expect_raw_sha)        mode = "raw+sha256(token)";
-  else if (clientHash === expect_decoded_sha) mode = "decoded+sha256(token)";
-  else if (clientHash === expect_raw_token)   mode = "raw+token";
-  else if (clientHash === expect_decoded_tok) mode = "decoded+token";
+  // 2) обратный порядок (на всякий случай): HMAC(key=token, msg="WebAppData")
+  const secret_rev_hex = await hmacHexWithKeyString(token, "WebAppData");
+  const secret_rev_raw = Uint8Array.from(secret_rev_hex.match(/.{1,2}/g)!.map(h => parseInt(h, 16))).buffer;
 
-  // Если ничего не сошлось — вернём расширенную диагностику
-  if (!mode) {
+  // 3) старый «совет» из сети: SHA256(token)
+  const secret_sha = await sha256Raw(token);
+
+  // 4) fallback: сам token как ключ (почти наверняка не нужен)
+  const tokenKeyRaw = te.encode(token);
+
+  // --- считаем ожидания для обоих DCS ---
+  const tryList: Array<{label:string, expect:string}> = [];
+
+  tryList.push({ label: "raw+HMAC(WebAppData->token)", expect: await hmacHexWithKeyRaw(secret_webapp_raw, raw.dcs) });
+  tryList.push({ label: "decoded+HMAC(WebAppData->token)", expect: await hmacHexWithKeyRaw(secret_webapp_raw, dec.dcs) });
+
+  tryList.push({ label: "raw+HMAC(token->WebAppData)", expect: await hmacHexWithKeyRaw(secret_rev_raw, raw.dcs) });
+  tryList.push({ label: "decoded+HMAC(token->WebAppData)", expect: await hmacHexWithKeyRaw(secret_rev_raw, dec.dcs) });
+
+  tryList.push({ label: "raw+SHA256(token)", expect: await hmacHexWithKeyRaw(secret_sha, raw.dcs) });
+  tryList.push({ label: "decoded+SHA256(token)", expect: await hmacHexWithKeyRaw(secret_sha, dec.dcs) });
+
+  // token как ключ напрямую
+  const expect_raw_tok = await hmacHexWithKeyRaw(tokenKeyRaw.buffer, raw.dcs);
+  const expect_dec_tok = await hmacHexWithKeyRaw(tokenKeyRaw.buffer, dec.dcs);
+  tryList.push({ label: "raw+token-key", expect: expect_raw_tok });
+  tryList.push({ label: "decoded+token-key", expect: expect_dec_tok });
+
+  // сравниваем
+  const hit = tryList.find(t => t.expect === clientHash);
+  if (!hit) {
     return json({
       ok: false,
       reason: "invalid_signature",
       got: clientHash,
-      // Покажем, что именно подписывали
-      dcs_raw_preview: short(raw.dcs, 300),
-      dcs_decoded_preview: short(dec.dcs, 300),
-      keys_raw: raw.keys,
-      keys_decoded: dec.keys,
-      values_raw_preview: raw.valsPreview,
-      values_decoded_preview: dec.valsPreview,
-      expected_raw_sha: expect_raw_sha,
-      expected_decoded_sha: expect_decoded_sha,
-      expected_raw_token: expect_raw_token,
-      expected_decoded_token: expect_decoded_tok
+      // для отладки — что именно пробовали
+      candidates: tryList
     }, 401);
   }
 
-  // Парсим user
+  // user
   let user: any = null;
   try {
-    const usp = new URLSearchParams(initData);
-    const uj = usp.get("user");
+    const uj = new URLSearchParams(initData).get("user");
     user = uj ? JSON.parse(uj) : null;
   } catch {}
   if (!user?.id) return json({ ok:false, reason:"user_missing" }, 400);
 
-  // Ставим куку
+  // Set-Cookie tg_uid на год
   const oneYear = 60*60*24*365;
   const cookie = [
     `tg_uid=${encodeURIComponent(String(user.id))}`,
-    "Path=/", "HttpOnly", "Secure", "SameSite=None", `Max-Age=${oneYear}`
+    "Path=/","HttpOnly","Secure","SameSite=None",`Max-Age=${oneYear}`
   ].join("; ");
 
-  return json({ ok:true, user, sig_mode: mode }, 200, { "Set-Cookie": cookie });
+  return json({ ok:true, user, sig_mode: hit.label }, 200, { "Set-Cookie": cookie });
 };
 
 export const onRequestGet: PagesFunction = async () =>
