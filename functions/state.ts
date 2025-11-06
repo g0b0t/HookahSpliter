@@ -13,7 +13,14 @@ export const onRequestPut: PagesFunction<Env> = async ({ env, request }) => {
   const uid = getUserIdFromRequest(request);
   if (!uid) return new Response("Unauthorized", { status: 401 });
 
-  const { state, clientRev } = await request.json<{ state: any; clientRev: number }>();
+  let parsed: { state: any; clientRev: number } | null;
+  try {
+    parsed = await request.json<{ state: any; clientRev: number }>();
+  } catch (error) {
+    return json({ ok: false, reason: "invalid_json" }, 400);
+  }
+
+  const { state, clientRev } = parsed ?? ({} as { state: any; clientRev: number });
   const key = `user:${uid}:state`;
   const current: any = await env.HOOKAH_DATA.get(key, "json");
   const serverRev = current?._rev ?? 0;
