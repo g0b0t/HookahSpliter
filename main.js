@@ -265,26 +265,34 @@ function autoFitFont(textEl, container) {
 }
 
 function setUserChip({ username, photoUrl, online }) {
-  const chip = document.querySelector('#tab-user .user-chip');
-  if (!chip) return;
-  const avatar = chip.querySelector('.user-avatar');
-  const handle = chip.querySelector('.user-handle');
+  const avatar = document.querySelector('#tab-user .user-avatar');
+  const handle = document.querySelector('#tab-user .user-handle');
+  const fallback = document.querySelector('#tab-user .avatar-fallback');
+  if (!avatar && !handle) return;
 
-  if (online && username) {
-    handle.textContent = '@' + username;
-  } else {
-    handle.textContent = 'Гость';
+  if (handle) {
+    if (online && username) {
+      handle.textContent = '@' + username;
+    } else {
+      handle.textContent = 'Гость';
+    }
   }
 
-  if (online && photoUrl) {
-    avatar.src = photoUrl;
-    avatar.hidden = false;
-  } else {
-    avatar.removeAttribute('src');
-    avatar.hidden = true;
+  if (avatar) {
+    if (online && photoUrl) {
+      avatar.src = photoUrl;
+      avatar.hidden = false;
+    } else {
+      avatar.removeAttribute('src');
+      avatar.hidden = true;
+    }
   }
 
-  autoFitFont(handle, chip);
+  if (fallback) {
+    fallback.hidden = Boolean(avatar && !avatar.hidden);
+  }
+
+  if (handle) autoFitFont(handle, handle.parentElement || handle);
   // обновим позицию индикатора вкладок, если есть
   try { window.dispatchEvent(new Event('resize')); } catch {}
 }
