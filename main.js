@@ -289,15 +289,6 @@ function setUserChip({ username, photoUrl, online }) {
   try { window.dispatchEvent(new Event('resize')); } catch {}
 }
 
-async function pingBackend() {
-  try {
-    const r = await fetch('/ping', { cache: 'no-store' });
-    backendOnline = r.ok;
-  } catch {
-    backendOnline = false;
-  }
-}
-
 function getTgUser() {
   return window.tg?.initDataUnsafe?.user || null;
 }
