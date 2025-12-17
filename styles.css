@@ -38,6 +38,7 @@
   
   /* Контейнер */
   .container { max-width: 980px; }
+  .main-content { padding-bottom: 110px; }
   
   /* =========================
      Тёмная (AMOLED) тема
@@ -111,7 +112,95 @@
     background: var(--accent);
     z-index: 1;
   }
-  
+
+  /* =========================
+     Нижняя навигация
+     ========================= */
+  .bottom-nav {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: .4rem .75rem calc(.4rem + env(safe-area-inset-bottom, 0px));
+    background: var(--surface);
+    border-top: 1px solid var(--border-soft);
+    box-shadow: 0 -6px 20px rgba(0,0,0,.08);
+    backdrop-filter: var(--card-blur);
+    -webkit-backdrop-filter: var(--card-blur);
+    z-index: 1030;
+  }
+
+  .bottom-nav .nav {
+    gap: .5rem;
+  }
+
+  .bottom-nav .nav-item {
+    flex: 1 1 0;
+    text-align: center;
+  }
+
+  .bottom-nav .nav-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 56px;
+    border-radius: 18px;
+    color: var(--text-muted);
+    background: transparent;
+    transition: color .2s ease, background-color .2s ease, transform .06s ease;
+  }
+
+  .bottom-nav .nav-link:active { transform: translateY(1px); }
+
+  .bottom-nav .nav-link.active {
+    color: var(--accent);
+    background: rgba(10,132,255,.12);
+  }
+
+  .bottom-nav .nav-link:hover { color: var(--text-main); }
+
+  .bottom-nav .nav-icon,
+  .bottom-nav .user-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+  }
+
+  .bottom-nav .nav-icon svg {
+    width: 26px;
+    height: 26px;
+  }
+
+  .bottom-nav .nav-indicator { display: none; }
+
+  .bottom-nav .nav-avatar {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: var(--surface-muted);
+    overflow: hidden;
+    color: var(--text-muted);
+  }
+
+  .bottom-nav .nav-avatar .user-avatar {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 50%;
+  }
+
+  .bottom-nav .nav-avatar .avatar-fallback {
+    width: 100%;
+    height: 100%;
+  }
+
+  .bottom-nav .nav-avatar .user-avatar:not([hidden]) + .avatar-fallback {
+    display: none;
+  }
+
   /* Доп. режим с классом .nav-animated (обратная совместимость) */
   .nav.nav-animated { position: relative; }
   .nav.nav-animated .nav-indicator {

@@ -15,78 +15,11 @@
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <div class="container py-3">
+    <div class="container py-3 main-content">
       <!-- Хедер -->
       <div class="text-center mb-3">
         <h1 class="h5 mb-0">Hookah Spliter</h1>
       </div>
-
-      <!-- Навигация -->
-      <ul class="nav nav-pills nav-caps" id="mainTab" role="tablist" data-min-font="10" data-max-font="14">
-        <li class="nav-item" role="presentation">
-          <button
-            class="nav-link active"
-            id="tab-session"
-            data-bs-toggle="tab"
-            data-bs-target="#sessionPane"
-            type="button"
-            role="tab"
-            aria-controls="sessionPane"
-            aria-selected="true"
-          >
-            Сессия
-          </button>
-        </li>
-
-        <li class="nav-item" role="presentation">
-          <button
-            class="nav-link"
-            id="tab-people"
-            data-bs-toggle="tab"
-            data-bs-target="#peoplePane"
-            type="button"
-            role="tab"
-            aria-controls="peoplePane"
-            aria-selected="false"
-          >
-            Участники
-          </button>
-        </li>
-
-        <li class="nav-item" role="presentation">
-          <button
-            class="nav-link"
-            id="tab-settings"
-            data-bs-toggle="tab"
-            data-bs-target="#settingsPane"
-            type="button"
-            role="tab"
-            aria-controls="settingsPane"
-            aria-selected="false"
-          >
-            Настройки
-          </button>
-        </li>
-
-        <!-- Кабинет: чип пользователя -->
-        <li class="nav-item" role="presentation">
-          <button
-            class="nav-link"
-            id="tab-user"
-            data-bs-toggle="tab"
-            data-bs-target="#historyPane"
-            type="button"
-            role="tab"
-            aria-controls="historyPane"
-            aria-selected="false"
-          >
-            <span class="user-chip">
-              <img class="user-avatar" alt="" hidden />
-              <span class="user-handle" data-min-font="10" data-max-font="14">Гость</span>
-            </span>
-          </button>
-        </li>
-      </ul>
 
       <!-- Контент вкладок -->
       <div class="tab-content pt-3">
@@ -112,6 +45,106 @@
         © <span id="year"></span> Hookah Spliter
       </footer>
     </div>
+
+    <!-- Нижняя навигация -->
+    <nav class="bottom-nav" aria-label="Основное меню">
+      <ul class="nav justify-content-around" id="mainTab" role="tablist" data-min-font="10" data-max-font="14">
+        <li class="nav-item" role="presentation">
+          <button
+            class="nav-link active"
+            id="tab-session"
+            data-bs-toggle="tab"
+            data-bs-target="#sessionPane"
+            type="button"
+            role="tab"
+            aria-controls="sessionPane"
+            aria-selected="true"
+          >
+            <span class="nav-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 6h16" />
+                <path d="M4 12h12" />
+                <path d="M4 18h16" />
+              </svg>
+            </span>
+            <span class="visually-hidden">Сессия</span>
+          </button>
+        </li>
+
+        <li class="nav-item" role="presentation">
+          <button
+            class="nav-link"
+            id="tab-people"
+            data-bs-toggle="tab"
+            data-bs-target="#peoplePane"
+            type="button"
+            role="tab"
+            aria-controls="peoplePane"
+            aria-selected="false"
+          >
+            <span class="nav-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="9" cy="8" r="3.25" />
+                <path d="M3.5 18.5c0-3 2.5-5.5 5.5-5.5" />
+                <circle cx="17" cy="9" r="2.5" />
+                <path d="M13.5 17.5c0-2 1.7-3.75 3.5-3.75" />
+              </svg>
+            </span>
+            <span class="visually-hidden">Участники</span>
+          </button>
+        </li>
+
+        <li class="nav-item" role="presentation">
+          <button
+            class="nav-link"
+            id="tab-settings"
+            data-bs-toggle="tab"
+            data-bs-target="#settingsPane"
+            type="button"
+            role="tab"
+            aria-controls="settingsPane"
+            aria-selected="false"
+          >
+            <span class="nav-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="3.5" />
+                <path d="M12 4.5V3" />
+                <path d="M18.25 6.25 19.3 5" />
+                <path d="M19.5 12h1.5" />
+                <path d="M18.25 17.75 19.3 19" />
+                <path d="M12 21v-1.5" />
+                <path d="M4.7 19 5.75 17.75" />
+                <path d="M3 12h1.5" />
+                <path d="M4.7 5 5.75 6.25" />
+              </svg>
+            </span>
+            <span class="visually-hidden">Настройки</span>
+          </button>
+        </li>
+
+        <li class="nav-item" role="presentation">
+          <button
+            class="nav-link"
+            id="tab-user"
+            data-bs-toggle="tab"
+            data-bs-target="#historyPane"
+            type="button"
+            role="tab"
+            aria-controls="historyPane"
+            aria-selected="false"
+          >
+            <span class="nav-icon nav-avatar" aria-hidden="true">
+              <img class="user-avatar" alt="" hidden />
+              <svg class="avatar-fallback" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="8" r="3.25" />
+                <path d="M6.5 19c.7-3 3-5 5.5-5s4.8 2 5.5 5" />
+              </svg>
+            </span>
+            <span class="visually-hidden">Кабинет</span>
+          </button>
+        </li>
+      </ul>
+    </nav>
 
     <!-- Telegram SDK -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
