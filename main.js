@@ -117,6 +117,7 @@ const createInitialState = () => ({
     date: "",
     sortBy: "date",
   },
+  historyView: "history", // history | stats
 });
 
 const loadState = () => {
@@ -142,6 +143,7 @@ const loadState = () => {
         date: parsed?.historyFilters?.date || "",
         sortBy: parsed?.historyFilters?.sortBy || "date",
       },
+      historyView: parsed?.historyView === "stats" ? "stats" : "history",
     };
   } catch (error) {
     console.warn("Не удалось прочитать сохранённое состояние", error);
@@ -367,6 +369,9 @@ class HookahSpliterApp {
     if (!("theme" in this.state.settings)) this.state.settings.theme = "system";
     if (!this.state.historyFilters) {
       this.state.historyFilters = { searchTerm: "", date: "", sortBy: "date" };
+    }
+    if (!this.state.historyView) {
+      this.state.historyView = "history";
     }
 
     // применяем тему сразу
@@ -1126,6 +1131,7 @@ class HookahSpliterApp {
   renderHistoryPane() {
     const container = this.elements.historyPane;
     const filters = this.state.historyFilters || { searchTerm: "", date: "", sortBy: "date" };
+    const activeView = this.state.historyView === "stats" ? "stats" : "history";
     const normalizeDate = (isoString) => {
       if (!isoString) return "";
       const d = new Date(isoString);
@@ -1133,7 +1139,9 @@ class HookahSpliterApp {
       return d.toISOString().slice(0, 10);
     };
 
-    const filteredSessions = [...this.state.savedSessions]
+    const allSessions = Array.isArray(this.state.savedSessions) ? this.state.savedSessions : [];
+
+    const filteredSessions = [...allSessions]
       .filter((session) => {
         const matchesName = filters.searchTerm
           ? (session.name || "").toLowerCase().includes(filters.searchTerm.toLowerCase())
@@ -1214,43 +1222,191 @@ class HookahSpliterApp {
         .join('')
       : '<div class="card-glass p-4 text-center text-muted">Сохранённых сессий пока нет.</div>';
 
-    container.innerHTML = `
-      <div class="card-glass p-3 mb-3">
-        <div class="row g-3 align-items-end">
-          <div class="col-12 col-md">
-            <label class="form-label mb-1" for="history-search">Поиск по названию</label>
-            <input
-              type="search"
-              id="history-search"
-              class="form-control"
-              placeholder="Введите название"
-              value="${escapeHtml(filters.searchTerm)}"
-              data-role="history-search"
-            />
-          </div>
-          <div class="col-12 col-md-auto">
-            <label class="form-label mb-1" for="history-date">Дата</label>
-            <input
-              type="date"
-              id="history-date"
-              class="form-control"
-              value="${filters.date || ""}"
-              data-role="history-date"
-            />
-          </div>
-          <div class="col-12 col-md-auto">
-            <div class="form-label mb-1">Сортировка</div>
-            <div class="btn-group w-100" role="group" aria-label="Сортировка истории">
-              <input type="radio" class="btn-check" name="history-sort" id="history-sort-date" value="date" ${filters.sortBy === "date" ? "checked" : ""}>
-              <label class="btn btn-outline-secondary" for="history-sort-date">По дате</label>
-              <input type="radio" class="btn-check" name="history-sort" id="history-sort-total" value="totalCost" ${filters.sortBy === "totalCost" ? "checked" : ""}>
-              <label class="btn btn-outline-secondary" for="history-sort-total">По сумме</label>
+    const totalCost = allSessions.reduce((sum, s) => sum + Number(s.totalCost || 0), 0);
+    const totalSessions = allSessions.length;
+    const avgSessionCost = totalSessions ? totalCost / totalSessions : 0;
+    const totalBowls = allSessions.reduce((sum, s) => sum + Number(s.bowlCount || 0), 0);
+    const avgBowlsPerSession = totalSessions ? totalBowls / totalSessions : 0;
+    const avgCostPerBowl = totalBowls ? totalCost / totalBowls : 0;
+    const monthAgoTs = Date.now() - 1000 * 60 * 60 * 24 * 30;
+    const sessionsLast30 = allSessions.filter((session) => {
+      const date = new Date(session.endedAt || session.startedAt || 0).getTime();
+      return !Number.isNaN(date) && date >= monthAgoTs;
+    }).length;
+
+    const participantTotals = new Map();
+    let participantEntries = 0;
+
+    allSessions.forEach((session) => {
+      (session.summary || []).forEach((row) => {
+        const name = (row?.name || "Без имени").trim() || "Без имени";
+        const total = Number(row?.total || 0);
+        participantTotals.set(name, (participantTotals.get(name) || 0) + total);
+        participantEntries += 1;
+      });
+    });
+
+    const uniqueParticipants = participantTotals.size;
+    const avgParticipantsPerSession = totalSessions ? participantEntries / totalSessions : 0;
+    const avgContributionPerPerson = uniqueParticipants ? totalCost / uniqueParticipants : 0;
+    const avgPaymentPerParticipant = participantEntries ? totalCost / participantEntries : 0;
+    const topParticipants = [...participantTotals.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3);
+
+    const formatNumber = (value, fractionDigits = 0) => Number(value || 0).toLocaleString("ru-RU", {
+      maximumFractionDigits: fractionDigits,
+      minimumFractionDigits: fractionDigits,
+    });
+
+    const statsHtml = allSessions.length
+      ? `
+        <div class="card-glass p-3 mb-3">
+          <h3 class="h6 mb-3">Общие метрики</h3>
+          <div class="row g-3 text-center text-md-start">
+            <div class="col-6 col-md-3">
+              <div class="text-muted small">Всего сессий</div>
+              <div class="fw-semibold">${formatNumber(totalSessions)}</div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="text-muted small">Общий расход</div>
+              <div class="fw-semibold">${formatCurrency(totalCost)}</div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="text-muted small">Средний чек</div>
+              <div class="fw-semibold">${formatCurrency(avgSessionCost)}</div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="text-muted small">Средняя чаша</div>
+              <div class="fw-semibold">${formatCurrency(avgCostPerBowl)}</div>
             </div>
           </div>
         </div>
+
+        <div class="card-glass p-3 mb-3">
+          <h3 class="h6 mb-3">Активность</h3>
+          <div class="row g-3 text-center text-md-start">
+            <div class="col-6 col-md-3">
+              <div class="text-muted small">Всего чаш</div>
+              <div class="fw-semibold">${formatNumber(totalBowls)}</div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="text-muted small">Чаш на сессию</div>
+              <div class="fw-semibold">${formatNumber(avgBowlsPerSession, 1)}</div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="text-muted small">Сессий за 30 дней</div>
+              <div class="fw-semibold">${formatNumber(sessionsLast30)}</div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="text-muted small">Участников на сессию</div>
+              <div class="fw-semibold">${formatNumber(avgParticipantsPerSession, 1)}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card-glass p-3 mb-3">
+          <h3 class="h6 mb-3">Платежи</h3>
+          <div class="row g-3 text-center text-md-start">
+            <div class="col-6 col-md-3">
+              <div class="text-muted small">Уникальных участников</div>
+              <div class="fw-semibold">${formatNumber(uniqueParticipants)}</div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="text-muted small">Средний вклад участника</div>
+              <div class="fw-semibold">${formatCurrency(avgContributionPerPerson)}</div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="text-muted small">В среднем на человека</div>
+              <div class="fw-semibold">${formatCurrency(avgPaymentPerParticipant)}</div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="text-muted small">Стоимость чаши</div>
+              <div class="fw-semibold">${formatCurrency(avgCostPerBowl)}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card-glass p-3">
+          <h3 class="h6 mb-3">Топ участников</h3>
+          ${topParticipants.length
+        ? topParticipants
+          .map(([name, total]) => `
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <div class="fw-semibold">${escapeHtml(name)}</div>
+                  <span class="badge text-bg-primary">${formatCurrency(total)}</span>
+                </div>
+              `)
+          .join("")
+        : '<div class="text-muted small">Пока нет распределения по участникам.</div>'}
+        </div>
+      `
+      : '<div class="card-glass p-4 text-center text-muted">Сохранённых данных для метрик пока нет.</div>';
+
+    container.innerHTML = `
+      <div class="mb-3">
+        <ul class="nav nav-pills" role="tablist">
+          <li class="nav-item" role="presentation">
+            <button class="nav-link ${activeView === "history" ? "active" : ""}" type="button" data-role="history-view" data-view="history">История</button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link ${activeView === "stats" ? "active" : ""}" type="button" data-role="history-view" data-view="stats">Статистика</button>
+          </li>
+        </ul>
       </div>
-      <div data-role="history-list">${listHtml}</div>
+
+      <div data-history-section="history" class="${activeView === "history" ? "" : "d-none"}">
+        <div class="card-glass p-3 mb-3">
+          <div class="row g-3 align-items-end">
+            <div class="col-12 col-md">
+              <label class="form-label mb-1" for="history-search">Поиск по названию</label>
+              <input
+                type="search"
+                id="history-search"
+                class="form-control"
+                placeholder="Введите название"
+                value="${escapeHtml(filters.searchTerm)}"
+                data-role="history-search"
+              />
+            </div>
+            <div class="col-12 col-md-auto">
+              <label class="form-label mb-1" for="history-date">Дата</label>
+              <input
+                type="date"
+                id="history-date"
+                class="form-control"
+                value="${filters.date || ""}"
+                data-role="history-date"
+              />
+            </div>
+            <div class="col-12 col-md-auto">
+              <div class="form-label mb-1">Сортировка</div>
+              <div class="btn-group w-100" role="group" aria-label="Сортировка истории">
+                <input type="radio" class="btn-check" name="history-sort" id="history-sort-date" value="date" ${filters.sortBy === "date" ? "checked" : ""}>
+                <label class="btn btn-outline-secondary" for="history-sort-date">По дате</label>
+                <input type="radio" class="btn-check" name="history-sort" id="history-sort-total" value="totalCost" ${filters.sortBy === "totalCost" ? "checked" : ""}>
+                <label class="btn btn-outline-secondary" for="history-sort-total">По сумме</label>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div data-role="history-list">${listHtml}</div>
+      </div>
+
+      <div data-history-section="stats" class="${activeView === "stats" ? "" : "d-none"}">
+        ${statsHtml}
+      </div>
     `;
+
+    container.querySelectorAll('[data-role="history-view"]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const view = button.dataset.view === "stats" ? "stats" : "history";
+        if (this.state.historyView !== view) {
+          this.state.historyView = view;
+          this.persistAndRender();
+        }
+      });
+    });
 
     const searchInput = container.querySelector('[data-role="history-search"]');
     searchInput?.addEventListener('input', (e) => {
