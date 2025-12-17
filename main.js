@@ -112,6 +112,11 @@ const createInitialState = () => ({
   people: [],
   currentSession: null,
   savedSessions: [],
+  historyFilters: {
+    searchTerm: "",
+    date: "",
+    sortBy: "date",
+  },
 });
 
 const loadState = () => {
@@ -132,6 +137,11 @@ const loadState = () => {
       people: Array.isArray(parsed.people) ? parsed.people : [],
       savedSessions: Array.isArray(parsed.savedSessions) ? parsed.savedSessions : [],
       currentSession: parsed.currentSession || null,
+      historyFilters: {
+        searchTerm: parsed?.historyFilters?.searchTerm || "",
+        date: parsed?.historyFilters?.date || "",
+        sortBy: parsed?.historyFilters?.sortBy || "date",
+      },
     };
   } catch (error) {
     console.warn("Не удалось прочитать сохранённое состояние", error);
@@ -355,6 +365,9 @@ class HookahSpliterApp {
     // апгрейд старого состояния
     this.state.settings = this.state.settings || {};
     if (!("theme" in this.state.settings)) this.state.settings.theme = "system";
+    if (!this.state.historyFilters) {
+      this.state.historyFilters = { searchTerm: "", date: "", sortBy: "date" };
+    }
 
     // применяем тему сразу
     applyTheme(this.state.settings.theme);
@@ -1112,74 +1125,162 @@ class HookahSpliterApp {
 
   renderHistoryPane() {
     const container = this.elements.historyPane;
-    if (!this.state.savedSessions.length) {
-      container.innerHTML = `
-        <div class="card-glass p-4 text-center text-muted">
-          Сохранённых сессий пока нет.
-        </div>
-      `;
-      return;
-    }
+    const filters = this.state.historyFilters || { searchTerm: "", date: "", sortBy: "date" };
+    const normalizeDate = (isoString) => {
+      if (!isoString) return "";
+      const d = new Date(isoString);
+      if (Number.isNaN(d.getTime())) return "";
+      return d.toISOString().slice(0, 10);
+    };
 
-    container.innerHTML = this.state.savedSessions
-      .map((session, index) => {
-        const collapseId = `history-${session.id}-${index}`;
-        return `
-          <div class="card-glass p-4 mb-3">
-            <div class="d-flex justify-content-between align-items-start gap-2">
-              <div>
-                <h3 class="h6 mb-1">${escapeHtml(session.name)}</h3>
-                <p class="text-muted small mb-2">${escapeHtml(formatDateRange(session.startedAt, session.endedAt))}</p>
+    const filteredSessions = [...this.state.savedSessions]
+      .filter((session) => {
+        const matchesName = filters.searchTerm
+          ? (session.name || "").toLowerCase().includes(filters.searchTerm.toLowerCase())
+          : true;
+        const filterDate = filters.date;
+        const sessionDate = normalizeDate(session.endedAt || session.startedAt);
+        const matchesDate = filterDate ? sessionDate === filterDate : true;
+        return matchesName && matchesDate;
+      })
+      .sort((a, b) => {
+        if (filters.sortBy === "totalCost") {
+          return (b.totalCost || 0) - (a.totalCost || 0);
+        }
+        const dateA = new Date(a.endedAt || a.startedAt || 0).getTime();
+        const dateB = new Date(b.endedAt || b.startedAt || 0).getTime();
+        return dateB - dateA;
+      });
+
+    const listHtml = filteredSessions.length
+      ? filteredSessions
+        .map((session, index) => {
+          const collapseId = `history-${session.id}-${index}`;
+          return `
+            <div class="card-glass p-4 mb-3">
+              <div class="d-flex justify-content-between align-items-start gap-2">
+                <div>
+                  <h3 class="h6 mb-1">${escapeHtml(session.name)}</h3>
+                  <p class="text-muted small mb-2">${escapeHtml(formatDateRange(session.startedAt, session.endedAt))}</p>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                  <span class="badge text-bg-light">${formatCurrency(session.totalCost)}</span>
+                  <button
+                    class="btn btn-sm btn-outline-danger"
+                    data-action="delete-session"
+                    data-session-id="${session.id}"
+                    type="button"
+                  >
+                    Удалить
+                  </button>
+                </div>
               </div>
-              <div class="d-flex align-items-center gap-2">
-                <span class="badge text-bg-light">${formatCurrency(session.totalCost)}</span>
-                <button
-                  class="btn btn-sm btn-outline-danger"
-                  data-action="delete-session"
-                  data-session-id="${session.id}"
-                  type="button"
-                >
-                  Удалить
-                </button>
+              <div class="text-muted small mb-3">Чаш: ${session.bowlCount}</div>
+              <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="collapse" data-bs-target="#${collapseId}" aria-expanded="false" aria-controls="${collapseId}">
+                Показать детали
+              </button>
+              <div class="collapse mt-3" id="${collapseId}">
+                <h4 class="h6 mb-2">Распределение</h4>
+                ${session.summary.length
+              ? session.summary
+                .map(
+                  (row) => `
+                          <div class="d-flex justify-content-between align-items-center mb-2">
+                            <div>${escapeHtml(row.name)}</div>
+                            <span class="badge text-bg-primary">${formatCurrency(row.total)}</span>
+                          </div>
+                        `,
+                )
+                .join("")
+              : '<p class="text-muted small mb-2">Нет участников</p>'}
+                <h4 class="h6 mt-3 mb-2">Чаши</h4>
+                ${session.bowls
+              .map(
+                (bowl) => `
+                      <div class="mb-2">
+                        <div class="d-flex justify-content-between align-items-center">
+                          <span class="fw-semibold">${escapeHtml(bowl.name)}</span>
+                          <span class="badge text-bg-light">${formatCurrency(bowl.cost)}</span>
+                        </div>
+                        <div class="text-muted small">${bowl.participants?.length ? bowl.participants.map(escapeHtml).join(', ') : 'Участников нет'}</div>
+                      </div>
+                    `,
+              )
+              .join('<hr class="my-2" />')}
               </div>
             </div>
-            <div class="text-muted small mb-3">Чаш: ${session.bowlCount}</div>
-            <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="collapse" data-bs-target="#${collapseId}" aria-expanded="false" aria-controls="${collapseId}">
-              Показать детали
-            </button>
-            <div class="collapse mt-3" id="${collapseId}">
-              <h4 class="h6 mb-2">Распределение</h4>
-              ${session.summary.length
-            ? session.summary
-              .map(
-                (row) => `
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                          <div>${escapeHtml(row.name)}</div>
-                          <span class="badge text-bg-primary">${formatCurrency(row.total)}</span>
-                        </div>
-                      `,
-              )
-              .join("")
-            : '<p class="text-muted small mb-2">Нет участников</p>'}
-              <h4 class="h6 mt-3 mb-2">Чаши</h4>
-              ${session.bowls
-            .map(
-              (bowl) => `
-                    <div class="mb-2">
-                      <div class="d-flex justify-content-between align-items-center">
-                        <span class="fw-semibold">${escapeHtml(bowl.name)}</span>
-                        <span class="badge text-bg-light">${formatCurrency(bowl.cost)}</span>
-                      </div>
-                      <div class="text-muted small">${bowl.participants?.length ? bowl.participants.map(escapeHtml).join(', ') : 'Участников нет'}</div>
-                    </div>
-                  `,
-            )
-            .join('<hr class="my-2" />')}
+          `;
+        })
+        .join('')
+      : '<div class="card-glass p-4 text-center text-muted">Сохранённых сессий пока нет.</div>';
+
+    container.innerHTML = `
+      <div class="card-glass p-3 mb-3">
+        <div class="row g-3 align-items-end">
+          <div class="col-12 col-md">
+            <label class="form-label mb-1" for="history-search">Поиск по названию</label>
+            <input
+              type="search"
+              id="history-search"
+              class="form-control"
+              placeholder="Введите название"
+              value="${escapeHtml(filters.searchTerm)}"
+              data-role="history-search"
+            />
+          </div>
+          <div class="col-12 col-md-auto">
+            <label class="form-label mb-1" for="history-date">Дата</label>
+            <input
+              type="date"
+              id="history-date"
+              class="form-control"
+              value="${filters.date || ""}"
+              data-role="history-date"
+            />
+          </div>
+          <div class="col-12 col-md-auto">
+            <div class="form-label mb-1">Сортировка</div>
+            <div class="btn-group w-100" role="group" aria-label="Сортировка истории">
+              <input type="radio" class="btn-check" name="history-sort" id="history-sort-date" value="date" ${filters.sortBy === "date" ? "checked" : ""}>
+              <label class="btn btn-outline-secondary" for="history-sort-date">По дате</label>
+              <input type="radio" class="btn-check" name="history-sort" id="history-sort-total" value="totalCost" ${filters.sortBy === "totalCost" ? "checked" : ""}>
+              <label class="btn btn-outline-secondary" for="history-sort-total">По сумме</label>
             </div>
           </div>
-        `;
-      })
-      .join('');
+        </div>
+      </div>
+      <div data-role="history-list">${listHtml}</div>
+    `;
+
+    const searchInput = container.querySelector('[data-role="history-search"]');
+    searchInput?.addEventListener('input', (e) => {
+      this.state.historyFilters = {
+        ...this.state.historyFilters,
+        searchTerm: e.target.value,
+      };
+      this.persistAndRender();
+    });
+
+    const dateInput = container.querySelector('[data-role="history-date"]');
+    dateInput?.addEventListener('change', (e) => {
+      this.state.historyFilters = {
+        ...this.state.historyFilters,
+        date: e.target.value,
+      };
+      this.persistAndRender();
+    });
+
+    container.querySelectorAll('input[name="history-sort"]').forEach((radio) => {
+      radio.addEventListener('change', (e) => {
+        if (e.target.checked) {
+          this.state.historyFilters = {
+            ...this.state.historyFilters,
+            sortBy: e.target.value,
+          };
+          this.persistAndRender();
+        }
+      });
+    });
 
     container.querySelectorAll('[data-action="delete-session"]').forEach((button) => {
       button.addEventListener('click', () => {
