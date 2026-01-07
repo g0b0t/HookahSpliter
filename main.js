@@ -324,6 +324,31 @@ function getTgUser() {
   return window.tg?.initDataUnsafe?.user || null;
 }
 
+function isTelegramAuthorized() {
+  return Boolean(getTgUser()?.id);
+}
+
+function getTgPersonFromUser(user) {
+  if (!user?.id) return null;
+  const name = user.username || user.first_name || "Пользователь";
+  return { id: String(user.id), name };
+}
+
+function ensureAuthorizedPersonInState() {
+  const user = getTgUser();
+  const person = getTgPersonFromUser(user);
+  if (!person) return;
+  const state = loadState();
+  const existing = state.people.find((item) => String(item.id) === person.id);
+  if (!existing) {
+    state.people.push(person);
+  } else if (person.name && existing.name !== person.name) {
+    existing.name = person.name;
+  }
+  state.people.sort((a, b) => a.name.localeCompare(b.name, "ru"));
+  saveStateLocalOnly(state);
+}
+
 async function initUserHeader() {
   await pingBackend();
   if (!backendOnline) {
@@ -673,7 +698,8 @@ class HookahSpliterApp {
     return true;
   }
 
-  addParticipantByName(name) {
+  addParticipantByName(name, { source = "manual" } = {}) {
+    if (!isTelegramAuthorized() || source === "manual") return;
     const session = this.state.currentSession;
     const bowl = this.ensureActiveBowl(session);
     if (!session || !session.isActive || !bowl) return;
@@ -752,7 +778,8 @@ class HookahSpliterApp {
     this.persistAndRender();
   }
 
-  addPersonFromPeopleTab(name) {
+  addPersonFromPeopleTab(name, { source = "manual" } = {}) {
+    if (!isTelegramAuthorized() || source === "manual") return;
     const trimmed = (name || "").trim();
     if (!trimmed) return;
     if (this.state.people.some((p) => p.name.toLowerCase() === trimmed.toLowerCase())) {
@@ -809,6 +836,9 @@ class HookahSpliterApp {
   renderSessionPane() {
     const container = this.elements.sessionPane;
     const session = this.state.currentSession;
+    const manualAddDisabled = true;
+    const participantAddDisabled = manualAddDisabled || !isTelegramAuthorized();
+    const participantAddHint = "Добавление доступно только для авторизованных пользователей.";
 
     if (!session || !session.isActive) {
       const suggestedName = session && !session.isActive ? session.name : getDefaultSessionName();
@@ -921,10 +951,24 @@ class HookahSpliterApp {
             .join("")
           : '<li class="list-group-item text-muted small">Добавьте участников в чашу</li>'}
               </ul>
-              <div class="input-group mb-3">
-                <input type="text" class="form-control" placeholder="Имя участника" data-role="participant-search" />
-                <button class="btn btn-primary" type="button" data-action="add-participant">Добавить</button>
+              <div class="input-group mb-2">
+                <input
+                  type="text"
+                  class="form-control"
+                  placeholder="Имя участника"
+                  data-role="participant-search"
+                  ${participantAddDisabled ? 'disabled aria-disabled="true"' : ""}
+                />
+                <button
+                  class="btn btn-primary"
+                  type="button"
+                  data-action="add-participant"
+                  ${participantAddDisabled ? 'disabled aria-disabled="true"' : ""}
+                >
+                  Добавить
+                </button>
               </div>
+              <p class="text-muted small mb-3">${participantAddHint}</p>
               ${availablePeople.length
           ? `
                   <div class="d-flex flex-wrap gap-2">
@@ -993,18 +1037,21 @@ class HookahSpliterApp {
       );
 
       const addParticipantInput = container.querySelector('[data-role="participant-search"]');
+      const addParticipantButton = container.querySelector('[data-action="add-participant"]');
       const addParticipant = () => {
         this.addParticipantByName(addParticipantInput.value);
         addParticipantInput.value = '';
         addParticipantInput.focus();
       };
-      container.querySelector('[data-action="add-participant"]').addEventListener('click', addParticipant);
-      addParticipantInput.addEventListener('keydown', (event) => {
-        if (event.key === 'Enter') {
-          event.preventDefault();
-          addParticipant();
-        }
-      });
+      if (!participantAddDisabled) {
+        addParticipantButton.addEventListener('click', addParticipant);
+        addParticipantInput.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            addParticipant();
+          }
+        });
+      }
 
       container.querySelectorAll('[data-action="remove-participant"]').forEach((button) => {
         button.addEventListener('click', () => this.removeParticipant(button.dataset.personId));
@@ -1018,15 +1065,31 @@ class HookahSpliterApp {
 
   renderPeoplePane() {
     const container = this.elements.peoplePane;
+    const manualAddDisabled = true;
+    const peopleAddDisabled = manualAddDisabled || !isTelegramAuthorized();
+    const peopleAddHint = "Добавление доступно только для авторизованных пользователей.";
     if (!this.state.people.length) {
       container.innerHTML = `
         <div class="card-glass p-4">
           <h2 class="h6 fw-semibold mb-3">Сохранённые участники</h2>
           <p class="text-muted small">Пока пусто. Добавьте участника в сессии или вручную ниже.</p>
-          <div class="input-group">
-            <input type="text" class="form-control" placeholder="Имя" data-role="new-person-name" />
-            <button class="btn btn-primary" data-action="create-person">Добавить</button>
+          <div class="input-group mb-2">
+            <input
+              type="text"
+              class="form-control"
+              placeholder="Имя"
+              data-role="new-person-name"
+              ${peopleAddDisabled ? 'disabled aria-disabled="true"' : ""}
+            />
+            <button
+              class="btn btn-primary"
+              data-action="create-person"
+              ${peopleAddDisabled ? 'disabled aria-disabled="true"' : ""}
+            >
+              Добавить
+            </button>
           </div>
+          <p class="text-muted small mb-0">${peopleAddHint}</p>
         </div>
       `;
       const addBtn = container.querySelector('[data-action="create-person"]');
@@ -1036,13 +1099,15 @@ class HookahSpliterApp {
         input.value = '';
         input.focus();
       };
-      addBtn.addEventListener('click', create);
-      input.addEventListener('keydown', (event) => {
-        if (event.key === 'Enter') {
-          event.preventDefault();
-          create();
-        }
-      });
+      if (!peopleAddDisabled) {
+        addBtn.addEventListener('click', create);
+        input.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            create();
+          }
+        });
+      }
       return;
     }
 
@@ -1050,10 +1115,23 @@ class HookahSpliterApp {
       <div class="d-grid gap-3">
         <div class="card-glass p-4">
           <h2 class="h6 fw-semibold mb-3">Сохранённые участники</h2>
-          <div class="input-group mb-3">
-            <input type="text" class="form-control" placeholder="Имя" data-role="new-person-name" />
-            <button class="btn btn-primary" data-action="create-person">Добавить</button>
+          <div class="input-group mb-2">
+            <input
+              type="text"
+              class="form-control"
+              placeholder="Имя"
+              data-role="new-person-name"
+              ${peopleAddDisabled ? 'disabled aria-disabled="true"' : ""}
+            />
+            <button
+              class="btn btn-primary"
+              data-action="create-person"
+              ${peopleAddDisabled ? 'disabled aria-disabled="true"' : ""}
+            >
+              Добавить
+            </button>
           </div>
+          <p class="text-muted small">${peopleAddHint}</p>
           <div class="list-group list-group-flush">
             ${this.state.people
         .map(
@@ -1081,13 +1159,15 @@ class HookahSpliterApp {
       input.value = '';
       input.focus();
     };
-    addBtn.addEventListener('click', create);
-    input.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        create();
-      }
-    });
+    if (!peopleAddDisabled) {
+      addBtn.addEventListener('click', create);
+      input.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          create();
+        }
+      });
+    }
 
     container.querySelectorAll('[data-role="person-name"]').forEach((field) => {
       field.addEventListener('change', (event) => {
@@ -1650,6 +1730,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   await initTelegramAuth(); // только авторизация, без UI
 
   await pullStateFromCloud();  // подменяем локалку облаком
+  ensureAuthorizedPersonInState();
   initHapticFeedback();
   initNavAnimated && initNavAnimated();
   window.app = new HookahSpliterApp();
