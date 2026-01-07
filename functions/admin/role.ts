@@ -1,10 +1,11 @@
-import { Env, addAdminUserId, getUserIdFromRequest, getUserRole, json } from "../_utils";
+import { Env, addAdminUserId, getUserFromRequest, getUserRole, json } from "../_utils";
 
 export const onRequestPost: PagesFunction<Env> = async ({ env, request }) => {
-  const uid = getUserIdFromRequest(request);
+  const { userId, username } = getUserFromRequest(request);
+  const uid = userId;
   if (!uid) return new Response("Unauthorized", { status: 401 });
 
-  const role = await getUserRole(uid, env);
+  const role = await getUserRole(uid, env, username);
   if (role !== "admin") return new Response("Forbidden", { status: 403 });
 
   let body: { userId?: string } | null = null;

@@ -19,14 +19,17 @@ async function buildWebAppSecretRaw(botToken: string): Promise<ArrayBuffer> {
   return crypto.subtle.sign("HMAC", key, te.encode(botToken)) as Promise<ArrayBuffer>;
 }
 
-function json(body: unknown, status = 200, extra: Record<string, string> = {}) {
+function json(body: unknown, status = 200, headers?: Headers) {
+  const nextHeaders = headers ?? new Headers();
+  if (!nextHeaders.has("Content-Type")) {
+    nextHeaders.set("Content-Type", "application/json; charset=utf-8");
+  }
+  if (!nextHeaders.has("Cache-Control")) {
+    nextHeaders.set("Cache-Control", "no-store");
+  }
   return new Response(JSON.stringify(body), {
     status,
-    headers: {
-      "Content-Type": "application/json; charset=utf-8",
-      "Cache-Control": "no-store",
-      ...extra,
-    },
+    headers: nextHeaders,
   });
 }
 
@@ -83,7 +86,21 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     `Max-Age=${oneYear}`,
   ].join("; ");
 
-  return json({ ok: true, user }, 200, { "Set-Cookie": cookie });
+  const headers = new Headers();
+  headers.append("Set-Cookie", cookie);
+  if (user.username) {
+    const usernameCookie = [
+      `tg_username=${encodeURIComponent(String(user.username))}`,
+      "Path=/",
+      "HttpOnly",
+      "Secure",
+      "SameSite=None",
+      `Max-Age=${oneYear}`,
+    ].join("; ");
+    headers.append("Set-Cookie", usernameCookie);
+  }
+
+  return json({ ok: true, user }, 200, headers);
 };
 
 export const onRequestGet: PagesFunction = async () =>
