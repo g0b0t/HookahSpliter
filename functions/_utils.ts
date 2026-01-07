@@ -1,4 +1,9 @@
-export type Env = { HOOKAH_DATA: KVNamespace };
+export type Env = {
+  HOOKAH_DATA: KVNamespace;
+  ADMIN_TG_UIDS?: string;
+};
+
+export type UserRole = "admin" | "user";
 
 // Достаём tg_uid из cookie, который ставит ваш /auth/telegram
 export function getUserIdFromRequest(req: Request): string | null {
@@ -12,6 +17,15 @@ export function json(data: unknown, init: number | ResponseInit = 200) {
     status: typeof init === "number" ? init : init.status ?? 200,
     headers: { "Content-Type": "application/json; charset=utf-8" },
   });
+}
+
+export function getUserRole(userId: string, env: Env): UserRole {
+  const rawList = env.ADMIN_TG_UIDS || "";
+  const ids = rawList
+    .split(/[,\s]+/)
+    .map(item => item.trim())
+    .filter(Boolean);
+  return ids.includes(userId) ? "admin" : "user";
 }
 
 export function defaultState() {
