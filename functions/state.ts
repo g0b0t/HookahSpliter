@@ -1,4 +1,4 @@
-import { Env, getUserIdFromRequest, json, defaultState } from "./_utils";
+import { Env, getUserIdFromRequest, json, defaultState, getUserRole } from "./_utils";
 
 export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
   const uid = getUserIdFromRequest(request);
@@ -6,7 +6,8 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
 
   const key = `user:${uid}:state`;
   const data = await env.HOOKAH_DATA.get(key, "json");
-  return json(data || defaultState());
+  const role = getUserRole(uid, env);
+  return json({ ...(data || defaultState()), role });
 };
 
 export const onRequestPut: PagesFunction<Env> = async ({ env, request }) => {
@@ -21,6 +22,7 @@ export const onRequestPut: PagesFunction<Env> = async ({ env, request }) => {
   }
 
   const { state, clientRev } = parsed ?? ({} as { state: any; clientRev: number });
+  const role = getUserRole(uid, env);
   const key = `user:${uid}:state`;
   const current: any = await env.HOOKAH_DATA.get(key, "json");
   const serverRev = current?._rev ?? 0;
@@ -29,13 +31,15 @@ export const onRequestPut: PagesFunction<Env> = async ({ env, request }) => {
     return json({ ok: false, reason: "conflict", server: current }, 409);
   }
 
+  const sanitizedState = { ...(state || {}) };
+  delete sanitizedState.role;
   const next = {
     ...(current || {}),
-    ...(state || {}),
+    ...sanitizedState,
     _rev: serverRev + 1,
     updatedAt: Date.now(),
   };
 
   await env.HOOKAH_DATA.put(key, JSON.stringify(next));
-  return json({ ok: true, state: next });
+  return json({ ok: true, state: { ...next, role } });
 };

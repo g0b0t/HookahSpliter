@@ -3,6 +3,10 @@ const MAX_COST_DIGITS = 5;
 const MAX_COST_VALUE = Number("9".repeat(MAX_COST_DIGITS));
 const API_BASE = "";
 const SYNC_DEBOUNCE_MS = 800;
+const USER_ROLES = Object.freeze({
+  ADMIN: "admin",
+  USER: "user",
+});
 let clientRev = 0;
 
 function getInitDataRaw() {
@@ -43,6 +47,7 @@ async function pullStateFromCloud() {
     const merged = {
       ...server,
       people: Array.isArray(server.people) ? server.people : (local.people || []),
+      role: server.role === USER_ROLES.ADMIN ? USER_ROLES.ADMIN : USER_ROLES.USER,
     };
     saveStateLocalOnly(merged);
     return merged;
@@ -112,6 +117,7 @@ const createInitialState = () => ({
   people: [],
   currentSession: null,
   savedSessions: [],
+  role: USER_ROLES.USER,
   historyFilters: {
     searchTerm: "",
     date: "",
@@ -139,6 +145,7 @@ const loadState = () => {
       people: Array.isArray(parsed.people) ? parsed.people : [],
       savedSessions: Array.isArray(parsed.savedSessions) ? parsed.savedSessions : [],
       currentSession: parsed.currentSession || null,
+      role: parsed?.role === USER_ROLES.ADMIN ? USER_ROLES.ADMIN : USER_ROLES.USER,
       historyFilters: {
         searchTerm: parsed?.historyFilters?.searchTerm || "",
         date: parsed?.historyFilters?.date || "",
