@@ -452,6 +452,10 @@ class HookahSpliterApp {
     this.renderAll();
   }
 
+  isAdmin() {
+    return this.state.role === USER_ROLES.ADMIN;
+  }
+
   showValidationMessage(element, message) {
     if (!element) {
       if (typeof window !== "undefined" && typeof window.alert === "function") {
@@ -636,6 +640,7 @@ class HookahSpliterApp {
   }
 
   deleteSavedSession(sessionId) {
+    if (!this.isAdmin()) return;
     this.state.savedSessions = this.state.savedSessions.filter(
       (session) => session.id !== sessionId,
     );
@@ -685,6 +690,7 @@ class HookahSpliterApp {
   }
 
   updateBowlCost(bowlId, costValue, inputElement) {
+    if (!this.isAdmin()) return false;
     const session = this.state.currentSession;
     if (!session) return false;
     const bowl = session.bowls.find((b) => b.id === bowlId);
@@ -699,7 +705,7 @@ class HookahSpliterApp {
   }
 
   addParticipantByName(name, { source = "manual" } = {}) {
-    if (!isTelegramAuthorized() || source === "manual") return;
+    if (!this.isAdmin() || !isTelegramAuthorized() || source === "manual") return;
     const session = this.state.currentSession;
     const bowl = this.ensureActiveBowl(session);
     if (!session || !session.isActive || !bowl) return;
@@ -731,6 +737,7 @@ class HookahSpliterApp {
   }
 
   quickAddParticipant(personId) {
+    if (!this.isAdmin()) return;
     const session = this.state.currentSession;
     const bowl = this.ensureActiveBowl(session);
     if (!session || !session.isActive || !bowl) return;
@@ -741,6 +748,7 @@ class HookahSpliterApp {
   }
 
   updateDefaultBowlCost(costValue, inputElement) {
+    if (!this.isAdmin()) return false;
     const value = this.validateCostValue(costValue, inputElement);
     if (value === null) {
       return false;
@@ -755,6 +763,43 @@ class HookahSpliterApp {
     }
     this.persistAndRender();
     return true;
+  }
+
+  async grantAdminRole(rawUserId, inputElement) {
+    if (!this.isAdmin()) return;
+    const userId = String(rawUserId || "").trim();
+    if (!userId) {
+      this.showValidationMessage(inputElement, "Введите Telegram ID пользователя.");
+      return;
+    }
+    if (!/^\d+$/.test(userId)) {
+      this.showValidationMessage(inputElement, "Telegram ID должен содержать только цифры.");
+      return;
+    }
+    try {
+      const response = await fetch("/admin/role", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId }),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        this.showValidationMessage(
+          inputElement,
+          payload?.reason === "invalid_user_id"
+            ? "Telegram ID должен содержать только цифры."
+            : "Не удалось выдать права администратора."
+        );
+        return;
+      }
+      if (inputElement) inputElement.value = "";
+      if (typeof window !== "undefined" && typeof window.alert === "function") {
+        window.alert("Права администратора успешно выданы.");
+      }
+    } catch {
+      this.showValidationMessage(inputElement, "Не удалось связаться с сервером.");
+    }
   }
 
   updatePersonName(personId, name) {
@@ -779,7 +824,7 @@ class HookahSpliterApp {
   }
 
   addPersonFromPeopleTab(name, { source = "manual" } = {}) {
-    if (!isTelegramAuthorized() || source === "manual") return;
+    if (!this.isAdmin() || !isTelegramAuthorized() || source === "manual") return;
     const trimmed = (name || "").trim();
     if (!trimmed) return;
     if (this.state.people.some((p) => p.name.toLowerCase() === trimmed.toLowerCase())) {
@@ -836,9 +881,13 @@ class HookahSpliterApp {
   renderSessionPane() {
     const container = this.elements.sessionPane;
     const session = this.state.currentSession;
+    const canManageParticipants = this.isAdmin();
+    const canEditCosts = this.isAdmin();
     const manualAddDisabled = true;
-    const participantAddDisabled = manualAddDisabled || !isTelegramAuthorized();
-    const participantAddHint = "Добавление доступно только для авторизованных пользователей.";
+    const participantAddDisabled = manualAddDisabled || !isTelegramAuthorized() || !canManageParticipants;
+    const participantAddHint = !canManageParticipants
+      ? "Добавление доступно только для администраторов."
+      : "Добавление доступно только для авторизованных пользователей.";
 
     if (!session || !session.isActive) {
       const suggestedName = session && !session.isActive ? session.name : getDefaultSessionName();
@@ -930,6 +979,7 @@ class HookahSpliterApp {
                 class="form-control"
                 value="${activeBowl.cost ?? ""}"
                 data-role="bowl-cost"
+                ${canEditCosts ? "" : 'readonly aria-readonly="true"'}
               />
             </div>
             <div>
@@ -951,25 +1001,27 @@ class HookahSpliterApp {
             .join("")
           : '<li class="list-group-item text-muted small">Добавьте участников в чашу</li>'}
               </ul>
-              <div class="input-group mb-2">
-                <input
-                  type="text"
-                  class="form-control"
-                  placeholder="Имя участника"
-                  data-role="participant-search"
-                  ${participantAddDisabled ? 'disabled aria-disabled="true"' : ""}
-                />
-                <button
-                  class="btn btn-primary"
-                  type="button"
-                  data-action="add-participant"
-                  ${participantAddDisabled ? 'disabled aria-disabled="true"' : ""}
-                >
-                  Добавить
-                </button>
-              </div>
-              <p class="text-muted small mb-3">${participantAddHint}</p>
-              ${availablePeople.length
+              ${canManageParticipants ? `
+                <div class="input-group mb-2">
+                  <input
+                    type="text"
+                    class="form-control"
+                    placeholder="Имя участника"
+                    data-role="participant-search"
+                    ${participantAddDisabled ? 'disabled aria-disabled="true"' : ""}
+                  />
+                  <button
+                    class="btn btn-primary"
+                    type="button"
+                    data-action="add-participant"
+                    ${participantAddDisabled ? 'disabled aria-disabled="true"' : ""}
+                  >
+                    Добавить
+                  </button>
+                </div>
+                <p class="text-muted small mb-3">${participantAddHint}</p>
+              ` : `<p class="text-muted small mb-3">${participantAddHint}</p>`}
+              ${availablePeople.length && canManageParticipants
           ? `
                   <div class="d-flex flex-wrap gap-2">
                     ${availablePeople
@@ -1030,11 +1082,13 @@ class HookahSpliterApp {
       container.querySelector('[data-role="bowl-name"]').addEventListener('input', (event) => {
         this.updateBowlName(activeBowl.id, event.target.value);
       });
-      this.setupCostInput(
-        container.querySelector('[data-role="bowl-cost"]'),
-        activeBowl.cost,
-        (input) => this.updateBowlCost(activeBowl.id, input.value, input)
-      );
+      if (canEditCosts) {
+        this.setupCostInput(
+          container.querySelector('[data-role="bowl-cost"]'),
+          activeBowl.cost,
+          (input) => this.updateBowlCost(activeBowl.id, input.value, input)
+        );
+      }
 
       const addParticipantInput = container.querySelector('[data-role="participant-search"]');
       const addParticipantButton = container.querySelector('[data-action="add-participant"]');
@@ -1043,7 +1097,7 @@ class HookahSpliterApp {
         addParticipantInput.value = '';
         addParticipantInput.focus();
       };
-      if (!participantAddDisabled) {
+      if (!participantAddDisabled && addParticipantButton && addParticipantInput) {
         addParticipantButton.addEventListener('click', addParticipant);
         addParticipantInput.addEventListener('keydown', (event) => {
           if (event.key === 'Enter') {
@@ -1065,31 +1119,36 @@ class HookahSpliterApp {
 
   renderPeoplePane() {
     const container = this.elements.peoplePane;
+    const canManagePeople = this.isAdmin();
     const manualAddDisabled = true;
-    const peopleAddDisabled = manualAddDisabled || !isTelegramAuthorized();
-    const peopleAddHint = "Добавление доступно только для авторизованных пользователей.";
+    const peopleAddDisabled = manualAddDisabled || !isTelegramAuthorized() || !canManagePeople;
+    const peopleAddHint = !canManagePeople
+      ? "Добавление доступно только для администраторов."
+      : "Добавление доступно только для авторизованных пользователей.";
     if (!this.state.people.length) {
       container.innerHTML = `
         <div class="card-glass p-4">
           <h2 class="h6 fw-semibold mb-3">Сохранённые участники</h2>
           <p class="text-muted small">Пока пусто. Добавьте участника в сессии или вручную ниже.</p>
-          <div class="input-group mb-2">
-            <input
-              type="text"
-              class="form-control"
-              placeholder="Имя"
-              data-role="new-person-name"
-              ${peopleAddDisabled ? 'disabled aria-disabled="true"' : ""}
-            />
-            <button
-              class="btn btn-primary"
-              data-action="create-person"
-              ${peopleAddDisabled ? 'disabled aria-disabled="true"' : ""}
-            >
-              Добавить
-            </button>
-          </div>
-          <p class="text-muted small mb-0">${peopleAddHint}</p>
+          ${canManagePeople ? `
+            <div class="input-group mb-2">
+              <input
+                type="text"
+                class="form-control"
+                placeholder="Имя"
+                data-role="new-person-name"
+                ${peopleAddDisabled ? 'disabled aria-disabled="true"' : ""}
+              />
+              <button
+                class="btn btn-primary"
+                data-action="create-person"
+                ${peopleAddDisabled ? 'disabled aria-disabled="true"' : ""}
+              >
+                Добавить
+              </button>
+            </div>
+            <p class="text-muted small mb-0">${peopleAddHint}</p>
+          ` : `<p class="text-muted small mb-0">${peopleAddHint}</p>`}
         </div>
       `;
       const addBtn = container.querySelector('[data-action="create-person"]');
@@ -1099,7 +1158,7 @@ class HookahSpliterApp {
         input.value = '';
         input.focus();
       };
-      if (!peopleAddDisabled) {
+      if (!peopleAddDisabled && addBtn && input) {
         addBtn.addEventListener('click', create);
         input.addEventListener('keydown', (event) => {
           if (event.key === 'Enter') {
@@ -1115,23 +1174,25 @@ class HookahSpliterApp {
       <div class="d-grid gap-3">
         <div class="card-glass p-4">
           <h2 class="h6 fw-semibold mb-3">Сохранённые участники</h2>
-          <div class="input-group mb-2">
-            <input
-              type="text"
-              class="form-control"
-              placeholder="Имя"
-              data-role="new-person-name"
-              ${peopleAddDisabled ? 'disabled aria-disabled="true"' : ""}
-            />
-            <button
-              class="btn btn-primary"
-              data-action="create-person"
-              ${peopleAddDisabled ? 'disabled aria-disabled="true"' : ""}
-            >
-              Добавить
-            </button>
-          </div>
-          <p class="text-muted small">${peopleAddHint}</p>
+          ${canManagePeople ? `
+            <div class="input-group mb-2">
+              <input
+                type="text"
+                class="form-control"
+                placeholder="Имя"
+                data-role="new-person-name"
+                ${peopleAddDisabled ? 'disabled aria-disabled="true"' : ""}
+              />
+              <button
+                class="btn btn-primary"
+                data-action="create-person"
+                ${peopleAddDisabled ? 'disabled aria-disabled="true"' : ""}
+              >
+                Добавить
+              </button>
+            </div>
+            <p class="text-muted small">${peopleAddHint}</p>
+          ` : `<p class="text-muted small">${peopleAddHint}</p>`}
           <div class="list-group list-group-flush">
             ${this.state.people
         .map(
@@ -1159,7 +1220,7 @@ class HookahSpliterApp {
       input.value = '';
       input.focus();
     };
-    if (!peopleAddDisabled) {
+    if (!peopleAddDisabled && addBtn && input) {
       addBtn.addEventListener('click', create);
       input.addEventListener('keydown', (event) => {
         if (event.key === 'Enter') {
@@ -1183,6 +1244,8 @@ class HookahSpliterApp {
   renderSettingsPane() {
     const container = this.elements.settingsPane;
     const theme = this.state.settings.theme || "system";
+    const canEditCosts = this.isAdmin();
+    const canManageAdmins = this.isAdmin();
 
     container.innerHTML = `
     <div class="card-glass p-4">
@@ -1198,6 +1261,7 @@ class HookahSpliterApp {
           class="form-control"
           value="${this.state.settings.defaultBowlCost ?? ""}"
           data-role="default-cost"
+          ${canEditCosts ? "" : 'readonly aria-readonly="true"'}
         />
       </div>
 
@@ -1216,13 +1280,32 @@ class HookahSpliterApp {
         <div class="form-text">«Системная» подстраивается под настройки ОС.</div>
       </div>
     </div>
+    ${canManageAdmins ? `
+      <div class="card-glass p-4 mt-3">
+        <h2 class="h6 fw-semibold mb-3">Права администратора</h2>
+        <div class="input-group">
+          <input
+            type="text"
+            class="form-control"
+            placeholder="Telegram ID пользователя"
+            data-role="admin-user-id"
+          />
+          <button class="btn btn-primary" type="button" data-action="grant-admin">
+            Сделать админом
+          </button>
+        </div>
+        <p class="text-muted small mt-2 mb-0">Только администратор может выдавать права.</p>
+      </div>
+    ` : ""}
   `;
 
-    this.setupCostInput(
-      container.querySelector('[data-role="default-cost"]'),
-      this.state.settings.defaultBowlCost,
-      (input) => this.updateDefaultBowlCost(input.value, input)
-    );
+    if (canEditCosts) {
+      this.setupCostInput(
+        container.querySelector('[data-role="default-cost"]'),
+        this.state.settings.defaultBowlCost,
+        (input) => this.updateDefaultBowlCost(input.value, input)
+      );
+    }
 
     // обработчик темы
     container.querySelectorAll('input[name="theme"]').forEach(radio => {
@@ -1233,6 +1316,20 @@ class HookahSpliterApp {
         // при желании можно this.renderAll(); но не обязательно
       });
     });
+
+    if (canManageAdmins) {
+      const adminInput = container.querySelector('[data-role="admin-user-id"]');
+      const grantButton = container.querySelector('[data-action="grant-admin"]');
+      grantButton?.addEventListener('click', () => {
+        this.grantAdminRole(adminInput?.value, adminInput);
+      });
+      adminInput?.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          this.grantAdminRole(adminInput?.value, adminInput);
+        }
+      });
+    }
 
   }
 
@@ -1248,6 +1345,7 @@ class HookahSpliterApp {
     };
 
     const allSessions = Array.isArray(this.state.savedSessions) ? this.state.savedSessions : [];
+    const canDeleteSessions = this.isAdmin();
 
     const filteredSessions = [...allSessions]
       .filter((session) => {
@@ -1281,14 +1379,16 @@ class HookahSpliterApp {
                 </div>
                 <div class="d-flex align-items-center gap-2">
                   <span class="badge text-bg-light">${formatCurrency(session.totalCost)}</span>
-                  <button
-                    class="btn btn-sm btn-outline-danger"
-                    data-action="delete-session"
-                    data-session-id="${session.id}"
-                    type="button"
-                  >
-                    Удалить
-                  </button>
+                  ${canDeleteSessions ? `
+                    <button
+                      class="btn btn-sm btn-outline-danger"
+                      data-action="delete-session"
+                      data-session-id="${session.id}"
+                      type="button"
+                    >
+                      Удалить
+                    </button>
+                  ` : ""}
                 </div>
               </div>
               <div class="text-muted small mb-3">Чаш: ${session.bowlCount}</div>
@@ -1590,11 +1690,13 @@ class HookahSpliterApp {
       });
     });
 
-    container.querySelectorAll('[data-action="delete-session"]').forEach((button) => {
-      button.addEventListener('click', () => {
-        this.deleteSavedSession(button.dataset.sessionId);
+    if (canDeleteSessions) {
+      container.querySelectorAll('[data-action="delete-session"]').forEach((button) => {
+        button.addEventListener('click', () => {
+          this.deleteSavedSession(button.dataset.sessionId);
+        });
       });
-    });
+    }
   }
 }
 
