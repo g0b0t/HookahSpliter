@@ -444,3 +444,42 @@
 .history-filters-card [data-role="history-filters"].collapse:not(.show) {
   margin-top: 0;
 }
+
+.history-sort {
+  display: inline-flex;
+  gap: 0.35rem;
+  padding: 0.15rem;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+}
+
+.history-sort-button {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color .2s ease, background-color .2s ease, transform .06s ease;
+}
+
+.history-sort-button svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.history-sort-button.is-active {
+  color: var(--accent);
+  background: rgba(10,132,255,.12);
+}
+
+.history-sort-button:active { transform: translateY(1px); }
