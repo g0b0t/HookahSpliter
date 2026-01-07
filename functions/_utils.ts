@@ -4,6 +4,7 @@ export type Env = {
 };
 
 export type UserRole = "admin" | "user";
+const ADMIN_LIST_KEY = "admin_uids";
 
 // Достаём tg_uid из cookie, который ставит ваш /auth/telegram
 export function getUserIdFromRequest(req: Request): string | null {
@@ -19,13 +20,38 @@ export function json(data: unknown, init: number | ResponseInit = 200) {
   });
 }
 
-export function getUserRole(userId: string, env: Env): UserRole {
-  const rawList = env.ADMIN_TG_UIDS || "";
-  const ids = rawList
+function parseAdminList(rawList: string) {
+  return rawList
     .split(/[,\s]+/)
     .map(item => item.trim())
     .filter(Boolean);
-  return ids.includes(userId) ? "admin" : "user";
+}
+
+export async function getAdminUserIds(env: Env) {
+  const fromEnv = parseAdminList(env.ADMIN_TG_UIDS || "");
+  const fromKv = await env.HOOKAH_DATA.get<string[]>(ADMIN_LIST_KEY, "json");
+  const ids = new Set<string>(fromEnv);
+  if (Array.isArray(fromKv)) {
+    fromKv.forEach((id) => {
+      if (typeof id === "string" && id.trim()) {
+        ids.add(id.trim());
+      }
+    });
+  }
+  return ids;
+}
+
+export async function addAdminUserId(userId: string, env: Env) {
+  const ids = await getAdminUserIds(env);
+  ids.add(userId);
+  const list = [...ids];
+  await env.HOOKAH_DATA.put(ADMIN_LIST_KEY, JSON.stringify(list));
+  return list;
+}
+
+export async function getUserRole(userId: string, env: Env): Promise<UserRole> {
+  const ids = await getAdminUserIds(env);
+  return ids.has(userId) ? "admin" : "user";
 }
 
 export function defaultState() {
