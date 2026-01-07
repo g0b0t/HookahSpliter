@@ -354,10 +354,27 @@ function getEffectiveTheme(choice) {
   return prefersDark ? "dark" : "light";
 }
 
+const TELEGRAM_THEME_COLORS = {
+  light: "#f5f6f8",
+  dark: "#000000",
+};
+
+function syncTelegramTheme(mode) {
+  const tg = window.tg;
+  if (!tg) return;
+  const color = TELEGRAM_THEME_COLORS[mode] || TELEGRAM_THEME_COLORS.light;
+  try {
+    tg.setHeaderColor?.(color);
+    tg.setBackgroundColor?.(color);
+    tg.setBottomBarColor?.(color);
+  } catch {}
+}
+
 function applyTheme(choice) {
   const mode = getEffectiveTheme(choice || "system");
   document.documentElement.setAttribute("data-theme", mode);
   document.body && document.body.setAttribute("data-theme", mode);
+  syncTelegramTheme(mode);
 }
 
 class HookahSpliterApp {
