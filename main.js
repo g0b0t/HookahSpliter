@@ -1377,6 +1377,36 @@ class HookahSpliterApp {
       </div>
 
       <div data-history-section="history" class="${activeView === "history" ? "" : "d-none"}">
+        <div class="d-flex justify-content-end mb-2">
+          <div class="history-sort" role="group" aria-label="Сортировка истории">
+            <button
+              class="history-sort-button ${filters.sortBy === "date" ? "is-active" : ""}"
+              type="button"
+              data-role="history-sort"
+              data-sort="date"
+              aria-pressed="${filters.sortBy === "date" ? "true" : "false"}"
+              title="По дате"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="3" y="5" width="18" height="16" rx="2" />
+                <path d="M8 3v4M16 3v4M3 10h18" />
+              </svg>
+            </button>
+            <button
+              class="history-sort-button ${filters.sortBy === "totalCost" ? "is-active" : ""}"
+              type="button"
+              data-role="history-sort"
+              data-sort="totalCost"
+              aria-pressed="${filters.sortBy === "totalCost" ? "true" : "false"}"
+              title="По сумме"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 3v18" />
+                <path d="M8 7c0-1.7 1.6-3 4-3s4 1.3 4 3-1.6 3-4 3-4 1.3-4 3 1.6 3 4 3 4-1.3 4-3" />
+              </svg>
+            </button>
+          </div>
+        </div>
         <div class="card-glass p-3 mb-3 history-filters-card">
           <div class="d-flex align-items-center justify-content-between gap-2">
             <div class="fw-semibold">Фильтры</div>
@@ -1414,15 +1444,6 @@ class HookahSpliterApp {
                   value="${filters.date || ""}"
                   data-role="history-date"
                 />
-              </div>
-              <div class="col-12 col-md-auto">
-                <div class="form-label mb-1">Сортировка</div>
-                <div class="btn-group w-100" role="group" aria-label="Сортировка истории">
-                  <input type="radio" class="btn-check" name="history-sort" id="history-sort-date" value="date" ${filters.sortBy === "date" ? "checked" : ""}>
-                  <label class="btn btn-outline-secondary" for="history-sort-date">По дате</label>
-                  <input type="radio" class="btn-check" name="history-sort" id="history-sort-total" value="totalCost" ${filters.sortBy === "totalCost" ? "checked" : ""}>
-                  <label class="btn btn-outline-secondary" for="history-sort-total">По сумме</label>
-                </div>
               </div>
             </div>
           </div>
@@ -1469,12 +1490,13 @@ class HookahSpliterApp {
       this.persistAndRender();
     });
 
-    container.querySelectorAll('input[name="history-sort"]').forEach((radio) => {
-      radio.addEventListener('change', (e) => {
-        if (e.target.checked) {
+    container.querySelectorAll('[data-role="history-sort"]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const nextSort = button.dataset.sort || "date";
+        if (this.state.historyFilters.sortBy !== nextSort) {
           this.state.historyFilters = {
             ...this.state.historyFilters,
-            sortBy: e.target.value,
+            sortBy: nextSort,
           };
           this.persistAndRender();
         }
