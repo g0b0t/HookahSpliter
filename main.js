@@ -1448,6 +1448,36 @@ class HookahSpliterApp {
             </div>
           </div>
         </div>
+        <div class="d-flex justify-content-end mb-3">
+          <div class="history-sort" role="group" aria-label="Сортировка истории">
+            <button
+              class="history-sort-button ${filters.sortBy === "date" ? "is-active" : ""}"
+              type="button"
+              data-role="history-sort"
+              data-sort="date"
+              aria-pressed="${filters.sortBy === "date" ? "true" : "false"}"
+              title="По дате"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="3" y="5" width="18" height="16" rx="2" />
+                <path d="M8 3v4M16 3v4M3 10h18" />
+              </svg>
+            </button>
+            <button
+              class="history-sort-button ${filters.sortBy === "totalCost" ? "is-active" : ""}"
+              type="button"
+              data-role="history-sort"
+              data-sort="totalCost"
+              aria-pressed="${filters.sortBy === "totalCost" ? "true" : "false"}"
+              title="По сумме"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 3v18" />
+                <path d="M8 7c0-1.7 1.6-3 4-3s4 1.3 4 3-1.6 3-4 3-4 1.3-4 3 1.6 3 4 3 4-1.3 4-3" />
+              </svg>
+            </button>
+          </div>
+        </div>
         <div data-role="history-list">${listHtml}</div>
       </div>
 
