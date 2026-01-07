@@ -117,6 +117,7 @@ const createInitialState = () => ({
     date: "",
     sortBy: "date",
   },
+  historyFiltersExpanded: false,
   historyView: "history", // history | stats
 });
 
@@ -143,6 +144,9 @@ const loadState = () => {
         date: parsed?.historyFilters?.date || "",
         sortBy: parsed?.historyFilters?.sortBy || "date",
       },
+      historyFiltersExpanded: typeof parsed?.historyFiltersExpanded === "boolean"
+        ? parsed.historyFiltersExpanded
+        : false,
       historyView: parsed?.historyView === "stats" ? "stats" : "history",
     };
   } catch (error) {
@@ -1373,36 +1377,52 @@ class HookahSpliterApp {
       </div>
 
       <div data-history-section="history" class="${activeView === "history" ? "" : "d-none"}">
-        <div class="card-glass p-3 mb-3">
-          <div class="row g-3 align-items-end">
-            <div class="col-12 col-md">
-              <label class="form-label mb-1" for="history-search">Поиск по названию</label>
-              <input
-                type="search"
-                id="history-search"
-                class="form-control"
-                placeholder="Введите название"
-                value="${escapeHtml(filters.searchTerm)}"
-                data-role="history-search"
-              />
-            </div>
-            <div class="col-12 col-md-auto">
-              <label class="form-label mb-1" for="history-date">Дата</label>
-              <input
-                type="date"
-                id="history-date"
-                class="form-control"
-                value="${filters.date || ""}"
-                data-role="history-date"
-              />
-            </div>
-            <div class="col-12 col-md-auto">
-              <div class="form-label mb-1">Сортировка</div>
-              <div class="btn-group w-100" role="group" aria-label="Сортировка истории">
-                <input type="radio" class="btn-check" name="history-sort" id="history-sort-date" value="date" ${filters.sortBy === "date" ? "checked" : ""}>
-                <label class="btn btn-outline-secondary" for="history-sort-date">По дате</label>
-                <input type="radio" class="btn-check" name="history-sort" id="history-sort-total" value="totalCost" ${filters.sortBy === "totalCost" ? "checked" : ""}>
-                <label class="btn btn-outline-secondary" for="history-sort-total">По сумме</label>
+        <div class="card-glass p-3 mb-3 history-filters-card">
+          <div class="d-flex align-items-center justify-content-between gap-2">
+            <div class="fw-semibold">Фильтры</div>
+            <button
+              class="btn btn-sm btn-outline-secondary"
+              type="button"
+              data-role="history-filters-toggle"
+              aria-expanded="${this.state.historyFiltersExpanded ? "true" : "false"}"
+            >
+              ${this.state.historyFiltersExpanded ? "Скрыть" : "Показать"}
+            </button>
+          </div>
+          <div
+            data-role="history-filters"
+            class="collapse ${this.state.historyFiltersExpanded ? "show" : ""}"
+          >
+            <div class="row g-3 align-items-end mt-1">
+              <div class="col-12 col-md">
+                <label class="form-label mb-1" for="history-search">Поиск по названию</label>
+                <input
+                  type="search"
+                  id="history-search"
+                  class="form-control"
+                  placeholder="Введите название"
+                  value="${escapeHtml(filters.searchTerm)}"
+                  data-role="history-search"
+                />
+              </div>
+              <div class="col-12 col-md-auto">
+                <label class="form-label mb-1" for="history-date">Дата</label>
+                <input
+                  type="date"
+                  id="history-date"
+                  class="form-control"
+                  value="${filters.date || ""}"
+                  data-role="history-date"
+                />
+              </div>
+              <div class="col-12 col-md-auto">
+                <div class="form-label mb-1">Сортировка</div>
+                <div class="btn-group w-100" role="group" aria-label="Сортировка истории">
+                  <input type="radio" class="btn-check" name="history-sort" id="history-sort-date" value="date" ${filters.sortBy === "date" ? "checked" : ""}>
+                  <label class="btn btn-outline-secondary" for="history-sort-date">По дате</label>
+                  <input type="radio" class="btn-check" name="history-sort" id="history-sort-total" value="totalCost" ${filters.sortBy === "totalCost" ? "checked" : ""}>
+                  <label class="btn btn-outline-secondary" for="history-sort-total">По сумме</label>
+                </div>
               </div>
             </div>
           </div>
@@ -1423,6 +1443,12 @@ class HookahSpliterApp {
           this.persistAndRender();
         }
       });
+    });
+
+    const filtersToggle = container.querySelector('[data-role="history-filters-toggle"]');
+    filtersToggle?.addEventListener('click', () => {
+      this.state.historyFiltersExpanded = !this.state.historyFiltersExpanded;
+      this.persistAndRender();
     });
 
     const searchInput = container.querySelector('[data-role="history-search"]');

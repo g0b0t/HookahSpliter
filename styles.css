@@ -197,7 +197,7 @@
     height: 100%;
   }
 
-  .bottom-nav .nav-avatar .user-avatar:not([hidden]) + .avatar-fallback {
+.bottom-nav .nav-avatar .user-avatar:not([hidden]) + .avatar-fallback {
     display: none;
   }
 
@@ -435,4 +435,12 @@
     padding-left:  calc(env(safe-area-inset-left, 0px) + .75rem);
     padding-right: calc(env(safe-area-inset-right, 0px) + .75rem);
   }
+}
+
+.history-filters-card [data-role="history-filters"] {
+  margin-top: 0.5rem;
+}
+
+.history-filters-card [data-role="history-filters"].collapse:not(.show) {
+  margin-top: 0;
 }
