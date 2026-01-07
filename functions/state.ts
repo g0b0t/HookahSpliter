@@ -1,17 +1,19 @@
-import { Env, getUserIdFromRequest, json, defaultState, getUserRole } from "./_utils";
+import { Env, getUserFromRequest, json, defaultState, getUserRole } from "./_utils";
 
 export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
-  const uid = getUserIdFromRequest(request);
+  const { userId, username } = getUserFromRequest(request);
+  const uid = userId;
   if (!uid) return new Response("Unauthorized", { status: 401 });
 
   const key = `user:${uid}:state`;
   const data = await env.HOOKAH_DATA.get(key, "json");
-  const role = getUserRole(uid, env);
+  const role = await getUserRole(uid, env, username);
   return json({ ...(data || defaultState()), role });
 };
 
 export const onRequestPut: PagesFunction<Env> = async ({ env, request }) => {
-  const uid = getUserIdFromRequest(request);
+  const { userId, username } = getUserFromRequest(request);
+  const uid = userId;
   if (!uid) return new Response("Unauthorized", { status: 401 });
 
   let parsed: { state: any; clientRev: number } | null;
@@ -22,7 +24,7 @@ export const onRequestPut: PagesFunction<Env> = async ({ env, request }) => {
   }
 
   const { state, clientRev } = parsed ?? ({} as { state: any; clientRev: number });
-  const role = getUserRole(uid, env);
+  const role = await getUserRole(uid, env, username);
   const key = `user:${uid}:state`;
   const current: any = await env.HOOKAH_DATA.get(key, "json");
   const serverRev = current?._rev ?? 0;
