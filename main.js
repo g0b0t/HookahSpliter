@@ -1525,6 +1525,22 @@ const triggerHaptic = (() => {
   };
 })();
 
+function initHapticFeedback() {
+  if (!window.tg?.HapticFeedback?.impactOccurred) return;
+  document.addEventListener(
+    "click",
+    (event) => {
+      const target = event.target?.closest?.(
+        "button, [role='button'], .btn, .nav-link, input[type='checkbox'], input[type='radio'], label"
+      );
+      if (!target) return;
+      if (target.disabled || target.getAttribute("aria-disabled") === "true") return;
+      triggerHaptic();
+    },
+    { capture: true }
+  );
+}
+
 function initNavAnimated() {
   const nav = document.getElementById('mainTab');
   if (!nav) return;
@@ -1557,7 +1573,6 @@ function initNavAnimated() {
   // Обновляем при показе вкладки (bootstrap 5)
   nav.querySelectorAll('.nav-link').forEach(btn => {
     btn.addEventListener('shown.bs.tab', () => {
-      triggerHaptic();
       update();
     });
   });
@@ -1580,6 +1595,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   await initTelegramAuth(); // только авторизация, без UI
 
   await pullStateFromCloud();  // подменяем локалку облаком
+  initHapticFeedback();
   initNavAnimated && initNavAnimated();
   window.app = new HookahSpliterApp();
   initUserHeader().catch(() => {});
