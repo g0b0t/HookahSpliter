@@ -1514,6 +1514,17 @@ const fitNavFontThrottled = throttle(() => {
 }, 50);
 
 
+const triggerHaptic = (() => {
+  let lastTriggerAt = 0;
+  return () => {
+    if (!window.tg?.HapticFeedback?.impactOccurred) return;
+    const now = Date.now();
+    if (now - lastTriggerAt < 100) return;
+    lastTriggerAt = now;
+    window.tg.HapticFeedback.impactOccurred("light");
+  };
+})();
+
 function initNavAnimated() {
   const nav = document.getElementById('mainTab');
   if (!nav) return;
@@ -1545,7 +1556,10 @@ function initNavAnimated() {
 
   // Обновляем при показе вкладки (bootstrap 5)
   nav.querySelectorAll('.nav-link').forEach(btn => {
-    btn.addEventListener('shown.bs.tab', update);
+    btn.addEventListener('shown.bs.tab', () => {
+      triggerHaptic();
+      update();
+    });
   });
 
   window.addEventListener('resize', () => {
