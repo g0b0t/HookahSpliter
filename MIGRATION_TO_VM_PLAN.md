@@ -126,6 +126,12 @@ sudo systemctl restart redis-server
 - `GET /whoami`
 - `GET /ping`
 
+Контракт `GET /whoami` в новой версии должен быть диагностическим и безопасным:
+
+- возвращает только `{ authorized: boolean, uid: masked | null }`;
+- **не** возвращает raw `Cookie` или другие чувствительные заголовки;
+- доступ только для admin-ролей, либо во включённом dev-режиме через ENV-флаг (`WHOAMI_DEV_ENABLED=true`).
+
 Логика переносится из:
 
 - `functions/auth/telegram.ts` — проверка `initData`.
@@ -195,6 +201,7 @@ sudo systemctl restart redis-server
 - `PORT`
 - `ADMIN_TG_UIDS` (опциональный bootstrap)
 - `NODE_ENV=production`
+- `WHOAMI_DEV_ENABLED=false` (в production держать выключенным)
 
 ## 7) Итерации работ
 
