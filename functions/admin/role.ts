@@ -15,16 +15,16 @@ export const onRequestPost: PagesFunction<Env> = async ({ env, request }) => {
     return json({ ok: false, reason: "invalid_json" }, 400);
   }
 
-  const userId = String(body?.userId || "").trim();
-  if (!userId) {
+  const targetUserId = String(body?.userId || "").trim();
+  if (!targetUserId) {
     return json({ ok: false, reason: "missing_user_id" }, 400);
   }
-  if (!/^\d+$/.test(userId)) {
+  if (!/^\d+$/.test(targetUserId)) {
     return json({ ok: false, reason: "invalid_user_id" }, 400);
   }
 
-  await addAdminUserId(userId, env);
-  return json({ ok: true, userId });
+  await addAdminUserId(targetUserId, env);
+  return json({ ok: true, userId: targetUserId });
 };
 
 export const onRequestGet: PagesFunction = async () =>

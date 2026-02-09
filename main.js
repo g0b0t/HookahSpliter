@@ -1,7 +1,6 @@
 const STORAGE_KEY = "hookahSpliterStateV2";
 const MAX_COST_DIGITS = 5;
 const MAX_COST_VALUE = Number("9".repeat(MAX_COST_DIGITS));
-const API_BASE = "";
 const SYNC_DEBOUNCE_MS = 800;
 const USER_ROLES = Object.freeze({
   ADMIN: "admin",
@@ -182,22 +181,6 @@ saveState = (state) => {
   pushStateDebounced(state);
 };
 
-async function loadSessionsFromCloud() {
-  try {
-    const r = await fetch(`/sessions`, { credentials: "include" });
-    if (!r.ok) return [];
-    return await r.json();
-  } catch (e) {
-    console.warn("loadSessionsFromCloud failed", e);
-    return [];
-  }
-}
-
-async function loadSessionFromCloud(id) {
-  const r = await fetch(`/sessions/${id}`, { credentials: "include" });
-  return r.ok ? r.json() : { ok: false };
-}
-
 const createId = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
 const getDefaultSessionName = () => {
@@ -362,25 +345,6 @@ async function initUserHeader() {
   console.info('[chip]', { backendOnline, tgUser: getTgUser() });
 
   setUserChip({ username, photoUrl, online: true });
-}
-
-function mergePeopleByName(serverArr, localArr) {
-  const map = new Map();
-  [...serverArr, ...localArr].forEach(p => {
-    const key = (p.name || "").trim().toLowerCase();
-    if (!key) return;
-    const prev = map.get(key);
-    if (!prev) {
-      map.set(key, { ...p });
-    } else {
-      map.set(key, {
-        ...prev,
-        id: prev.id || p.id,
-        name: prev.name || p.name,
-      });
-    }
-  });
-  return [...map.values()];
 }
 
 function getEffectiveTheme(choice) {
@@ -639,8 +603,25 @@ class HookahSpliterApp {
     this.persistAndRender();
   }
 
-  deleteSavedSession(sessionId) {
+  async deleteSavedSession(sessionId) {
     if (!this.isAdmin()) return;
+
+    try {
+      const response = await fetch(`/sessions/${encodeURIComponent(sessionId)}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        const message = await response.text();
+        console.warn("deleteSavedSession failed:", response.status, message);
+        return;
+      }
+    } catch (error) {
+      console.warn("deleteSavedSession network error:", error);
+      return;
+    }
+
     this.state.savedSessions = this.state.savedSessions.filter(
       (session) => session.id !== sessionId,
     );
@@ -1693,7 +1674,7 @@ class HookahSpliterApp {
     if (canDeleteSessions) {
       container.querySelectorAll('[data-action="delete-session"]').forEach((button) => {
         button.addEventListener('click', () => {
-          this.deleteSavedSession(button.dataset.sessionId);
+          void this.deleteSavedSession(button.dataset.sessionId);
         });
       });
     }
