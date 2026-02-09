@@ -364,8 +364,4 @@ export function renderHistoryPane(app) {
       });
     });
   }
-  }
-}
-
-// Универсальный авто-фит для всей навигации: уменьшает font-size у UL,
 }

@@ -89,6 +89,4 @@ export function renderSettingsPane(app) {
       }
     });
   }
-
-  }
 }
