@@ -122,5 +122,4 @@ export function renderPeoplePane(app) {
   container.querySelectorAll('[data-action="delete-person"]').forEach((button) => {
     button.addEventListener('click', () => app.deletePerson(button.dataset.personId));
   });
-  }
 }
