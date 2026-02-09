@@ -238,5 +238,4 @@ export function renderSessionPane(app) {
       button.addEventListener('click', () => app.quickAddParticipant(button.dataset.personId));
     });
   }
-  }
 }
